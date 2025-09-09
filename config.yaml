@@ -1,0 +1,111 @@
+project: gfp
+
+debug: True
+device: cuda
+seed: 42
+
+sampler:
+  model_name_or_path: facebook/esmfold_v1
+  num_shuffles: 100000
+  shuffle_rate: 0.04
+  window_sizes: [1, 3, 5]
+
+predictor:
+  ex:
+    batch_size: 16
+    destruct_per_samples: 2
+    model_name_or_path: facebook/esm2_t33_650M_UR50D
+    mutate_per_samples: 5
+    noise_ratio: 0.1
+    num_destructions: 2
+    num_epochs: 100
+    num_mutations: 2
+    num_trials: 30
+    patience: 5
+    target: ex
+    test_size: 0.2
+  
+  em:
+    batch_size: 16
+    destruct_per_samples: 2
+    model_name_or_path: facebook/esm2_t33_650M_UR50D
+    mutate_per_samples: 5
+    noise_ratio: 0.1
+    num_destructions: 2
+    num_epochs: 100
+    num_mutations: 2
+    num_trials: 30
+    patience: 5
+    target: em
+    test_size: 0.2
+
+  brightness:
+    batch_size: 16
+    destruct_per_samples: 2
+    model_name_or_path: facebook/esm2_t33_650M_UR50D
+    mutate_per_samples: 5
+    noise_ratio: 0.1
+    num_destructions: 2
+    num_epochs: 100
+    num_mutations: 2
+    num_trials: 30
+    patience: 5
+    target: brightness
+    test_size: 0.2
+
+evaluator:
+  likelihood:
+    batch_size: 32
+    model_name_or_path: westlake-repl/SaProt_650M_AF2
+    threshold: 0.0
+    
+  ex:
+    batch_size: 32
+    mode: range
+    upper: 388
+    lower: 378
+    series:
+      top_p: 0.4
+    parallel:
+      top_p: 0.2
+
+  em:
+    batch_size: 32
+    mode: range
+    upper: 453
+    lower: 443
+    series:
+      top_p: 0.4
+    parallel:
+      top_p: 0.2 
+
+  brightness:
+    batch_size: 32
+    mode: max
+    series:
+      top_p: 0.4
+    parallel:
+      top_p: 0.2
+
+generator:
+  batch_size: 32
+  lora_alpha: 8
+  lora_dropout: 0.1
+  model_name_or_path: hugohrban/progen2-small
+  num_epochs: 6
+  num_samples: 300
+  num_trials: 30
+  patience: 3
+  prompt: MSKGE
+  r: 8
+  test_size: 0.1
+
+early_stopper:
+  batch_size: 32
+  model_name_or_path: facebook/esm2_t33_650M_UR50D
+  num_samples: 600
+  patience: 5
+
+runner:
+  num_iterations: 35
+  num_sequences: 50000
