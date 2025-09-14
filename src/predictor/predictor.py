@@ -164,6 +164,8 @@ class Predictor:
                 candidates = conserve(aa, upper=-1)
                 if not candidates:
                     candidates = conserve(aa, upper=0)
+                if not candidates:
+                    candidates = [bb for bb in blosum62.alphabet if bb != aa]
                 sequence[pos] = random.choice(candidates)
 
             sequence = "".join(sequence)
@@ -189,6 +191,8 @@ class Predictor:
                 candidates = conserve(aa, lower=1)
                 if not candidates:
                     candidates = conserve(aa, lower=0)
+                if not candidates:
+                    candidates = [bb for bb in blosum62.alphabet if bb != aa]
                 sequence[pos] = random.choice(candidates)
 
             sequence = "".join(sequence)
