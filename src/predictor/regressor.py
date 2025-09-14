@@ -1,3 +1,4 @@
+from typing import Optional
 import torch
 import torch.nn as nn
 from transformers import AutoModel
@@ -34,16 +35,16 @@ class Regressor(nn.Module):
     def forward(
         self,
         *,
-        input_ids: torch.Tensor | None = None,
-        attention_mask: torch.Tensor | None = None,
-        labels: torch.Tensor | None = None,
+        input_ids: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        labels: Optional[torch.Tensor] = None,
         **_: torch.Tensor,
     ) -> dict[str, torch.Tensor]:
         """
         Args:
-            input_ids (torch.Tensor, shape (B, L)): トークン列
-            attention_mask (torch.Tensor, shpae (B, L)): マスク
-            labels (torch.Tensor, optional, shape (B, 1)): 正解ラベル
+            input_ids (torch.Tensor): トークン
+            attention_mask (torch.Tensor): マスク
+            labels (torch.Tensor): ラベル
 
         Returns:
             SequenceClassifierOutput: 結果
