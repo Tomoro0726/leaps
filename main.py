@@ -11,8 +11,7 @@ from src.runner import Runner
 def main():
     cfg = Config()
 
-    csv_path = os.path.join("data", "gfp.csv")
-    runner = Runner(cfg, csv_path)
+    runner = Runner(cfg)
 
     sequences: List[str] = runner.run()
     print(sequences)

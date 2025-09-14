@@ -22,7 +22,7 @@ class Runner:
     実行を管理するクラス
     """
 
-    def __init__(self, cfg: Config, csv_path: str | Path) -> None:
+    def __init__(self, cfg: Config, csv_path: str | Path = "data/input.csv") -> None:
         """
         Args:
             cfg (Config): 設定
