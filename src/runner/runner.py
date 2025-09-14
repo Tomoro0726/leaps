@@ -1,6 +1,6 @@
 from pathlib import Path
 import shutil
-from typing import Dict, List, Mapping, Optional
+from typing import Dict, List, Mapping
 
 from Bio import SeqIO
 from Bio.Seq import Seq

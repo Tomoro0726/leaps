@@ -1,4 +1,3 @@
-from typing import Optional
 import torch
 import torch.nn as nn
 from transformers import AutoModel
@@ -12,9 +11,7 @@ class Regressor(nn.Module):
     回帰モデルを定義するクラス
     """
 
-    def __init__(
-        self, backbone: AutoModel, hidden_dim: int
-    ) -> None:
+    def __init__(self, backbone: AutoModel, hidden_dim: int) -> None:
         """
         Args:
             backbone (AutoModel): 学習済みモデル
