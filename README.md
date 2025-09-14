@@ -92,7 +92,8 @@ leaps/
 │   ├── generator/            # タンパク質を生成するクラス
 │   ├── predictor/            # タンパク質を予測するクラス
 │   ├── runner/               # 実行を管理するクラス
-│   └── sampler/              # サンプリングするクラス
+│   ├── sampler/              # タンパク質をサンプリングするクラス
+│   └── state/                # 状態を管理するクラス
 ├── .gitattributes
 ├── .gitignore
 ├── .python-version

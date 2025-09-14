@@ -1,125 +1,95 @@
+from abc import ABC, abstractmethod
 from pathlib import Path
-from types import SimpleNamespace
-from typing import List, Mapping, Optional
+from typing import List, Optional, Tuple
 
-from Bio import SeqIO
-from Bio.Seq import Seq
-from Bio.SeqRecord import SeqRecord
-
-from src.predictor.predictor import Predictor
-from src.evaluator.fitness import Fitness
-from src.evaluator.likelihood import Likelihood
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
 
 
-class Evaluator:
+class Evaluator(ABC):
     """
-    タンパク質をスクリーニングするクラス
+    スクリーニングするクラス
     """
 
-    def __init__(
+    mode: Optional[str]
+    lower: Optional[float]
+    upper: Optional[float]
+
+    @abstractmethod
+    def filter(self, *args, **kwargs) -> List[str]:
+        raise NotImplementedError
+
+    def _plot(self, scores: List[float], save_path: str | Path) -> None:
+        """
+        Args:
+            scores (List[float]): スコアのリスト
+            save_path (str | Path): 保存先のパス
+        """
+        save_path = Path(save_path)
+
+        x = np.asarray(scores, dtype=float)
+
+        plt.figure(figsize=(8, 6), tight_layout=True)
+        plt.hist(x, bins="fd")
+        plt.savefig(save_path)
+        plt.close()
+
+    def _save(
         self,
-        cfg: Mapping[str, object],
-        predictors: Optional[Mapping[str, Predictor]] = None,
+        sequences: List[str],
+        scores: List[float],
+        save_path: str | Path,
     ) -> None:
         """
         Args:
-            cfg (Mapping[str, object]): 設定
-            predictors (Optional[Mapping[str, Predictor]): 予測器の辞書
+            sequences (List[str]): 保存したいタンパク質のリスト
+            scores (List[float]): 保存したいスコアのリスト
+            save_path (str | Path): 保存先のパス
         """
-        cfg = SimpleNamespace(**cfg)
+        save_path = Path(save_path)
 
-        self.project_dir: Path = Path("runs") / cfg.project
+        df = pd.DataFrame({"sequence": sequences, "score": scores})
+        df.to_csv(save_path, index=False)
 
-        self.save_dir: Path = self.project_dir / "evaluator"
-        self.save_dir.mkdir(parents=True, exist_ok=True)
-
-        self.likelihood = Likelihood(cfg.likelihood)
-
-        self.fitnesses: List[Fitness] = []
-        for k, v in (predictors or {}).items():
-            self.fitnesses.append(Fitness(getattr(cfg, k), v))
-
-    def _unique(self, sequences: List[str]) -> List[str]:
+    def _sort(
+        self,
+        sequences: List[str],
+        scores: List[float],
+    ) -> List[Tuple[str, float]]:
         """
         Args:
-            sequences (List[str]): タンパク質のリスト
+            sequences (List[str]): ソートしたいタンパク質のリスト
+            scores (List[float]): ソートしたいスコアのリスト
 
         Returns:
-            List[str]: 重複を除去したタンパク質のリスト
+            List[Tuple[str, float]]: ソートされたリスト
         """
-        visited = set()
-        outputs: List[str] = []
-        for seq in sequences:
-            if seq not in visited:
-                visited.add(seq)
-                outputs.append(seq)
+        if getattr(self, "mode", None) == "max":
+            indices = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)
 
-        return outputs
+        elif getattr(self, "mode", None) == "min":
+            indices = sorted(range(len(scores)), key=lambda i: scores[i])
 
-    def _pipeline(self, sequences: List[str]) -> List[str]:
-        """
-        Args:
-            sequences (List[str]): タンパク質のリスト
+        elif getattr(self, "mode", None) == "range":
+            assert self.lower is not None and self.upper is not None
 
-        Returns:
-            List[str]: スクリーニングされたタンパク質のリスト
-        """
-        outputs = []
+            center = 0.5 * (self.lower + self.upper)
 
-        for fitness in self.fitnesses:
-            outputs.extend(fitness.filter(sequences, strategy="parallel"))
+            def key(i: int):
+                score = scores[i]
+                if self.lower <= score <= self.upper:
+                    return (0.0, abs(score - center))
+                dist = (
+                    (self.lower - score) if score < self.lower else (score - self.upper)
+                )
+                return (abs(dist), abs(score - center))
 
-        outputs = self._unique(outputs)
+            indices = sorted(range(len(scores)), key=key)
 
-        for fitness in self.fitnesses:
-            sequences = fitness.filter(sequences, strategy="series")
-
-        outputs.extend(sequences)
-        outputs = self._unique(outputs)
-
-        return outputs
-
-    def filter(self, iteration: int, inputs: List[List[str]] | List[str]) -> List[str]:
-        """
-        Args:
-            iteration (int): イテレーション
-            inputs (List[List[str]] | List[str]): スクリーニングするタンパク質のリスト
-
-        Returns:
-            List[str]: スクリーニングされたタンパク質のリスト
-        """
-        records: List[SeqRecord] = []
-
-        save_path = self.save_dir / f"{iteration}.fasta"
-        if save_path.exists():
-            records = list(SeqIO.parse(save_path, "fasta"))
-            outputs = [str(rec.seq) for rec in records]
-
-            return outputs
-
-        if iteration == 1:
-            count = 0
-            for i, sequences in enumerate(inputs, start=1):
-                pdb_path = self.project_dir / "sampler" / "structure" / f"{i}.pdb"
-                sequences = self.likelihood.filter(sequences, pdb_path)
-                sequences = self._pipeline(sequences)
-
-                for seq in sequences:
-                    records.append(
-                        SeqRecord(seq=Seq(seq), id=str(count), description="")
-                    )
-                    count += 1
         else:
-            sequences: List[str] = []
-            if isinstance(inputs[0], list):
-                sequences = [seq for col in inputs for seq in col]
-            sequences = self._pipeline(sequences)
+            indices = []
 
-            for i, seq in enumerate(sequences, start=1):
-                records.append(SeqRecord(seq=Seq(seq), id=str(i), description=""))
-
-        SeqIO.write(records, save_path, "fasta")
-
-        outputs = [str(rec.seq) for rec in records]
+        outputs = [(sequences[i], scores[i]) for i in indices]
 
         return outputs

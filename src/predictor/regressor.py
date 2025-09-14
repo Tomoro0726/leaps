@@ -13,13 +13,12 @@ class Regressor(nn.Module):
     """
 
     def __init__(
-        self, backbone: AutoModel, hidden_dim: int, dropout: Optional[float] = 0.5
+        self, backbone: AutoModel, hidden_dim: int
     ) -> None:
         """
         Args:
             backbone (AutoModel): 学習済みモデル
             hidden_dim (int): 隠れ層の次元数
-            dropout (Optional[float]): ドロップアウト率
         """
 
         super().__init__()
@@ -29,7 +28,7 @@ class Regressor(nn.Module):
             p.requires_grad_(False)
 
         self.head = nn.Sequential(
-            Dropout(dropout),
+            Dropout(0.5),
             nn.Linear(hidden_dim, hidden_dim // 2),
             nn.ReLU(),
             nn.Linear(hidden_dim // 2, 1),

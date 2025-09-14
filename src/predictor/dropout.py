@@ -29,11 +29,11 @@ class Dropout(nn.Module):
         dim = x.size(-1)
         k = max(1, int(round(dim * self.p)))
 
-        flat = x.reshape(-1, dim)
+        x_flat = x.reshape(-1, dim)
 
         with torch.no_grad():
-            std = flat.std(dim=0, unbiased=False)
-            med = flat.median(dim=0).values
+            std = x_flat.std(dim=0, unbiased=False)
+            med = x_flat.median(dim=0).values
             cvar = std / (med.abs() + self.eps)
 
             _, index = torch.topk(cvar, k, largest=True)

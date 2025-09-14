@@ -3,57 +3,71 @@ from pathlib import Path
 import subprocess
 import tempfile
 from types import SimpleNamespace
-from typing import Dict, List, Mapping, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Mapping, Optional
 
 import torch
 from tqdm import trange
 from transformers import AutoTokenizer, EsmForMaskedLM
 
+from src.evaluator.evaluator import Evaluator
+from src.state.state import State
 
-class Likelihood:
+
+class Likelihood(Evaluator):
     """
     対数尤度でスクリーニングするクラス
     """
 
-    def __init__(self, cfg: Mapping[str, object]) -> None:
+    def __init__(self, cfg: Mapping[str, Any], state: State) -> None:
         """
         Args:
-            cfg (Mapping[str, object]): 設定
+            cfg (Mapping[str, Any]): 設定
         """
-        self.cfg = SimpleNamespace(**cfg)
+        cfg = SimpleNamespace(**cfg)
+        self.state = state
 
-        self.debug: bool = self.cfg.debug
-        self.device: torch.device = self.cfg.device
+        self.debug: bool = cfg.debug
+        self.device: torch.device = cfg.device
 
-        self.batch_size: int = self.cfg.batch_size
+        project_dir: Path = Path("runs") / cfg.project
 
-        self.mode: Optional[str] = getattr(self.cfg, "mode", None)
-        self.lower: Optional[float] = getattr(self.cfg, "lower", None)
-        self.upper: Optional[float] = getattr(self.cfg, "upper", None)
+        self.figure_dir: Path = project_dir / "evaluator" / "likelihood" / "figure"
+        self.figure_dir.mkdir(parents=True, exist_ok=True)
 
-        self.threshold: Optional[float] = getattr(self.cfg, "threshold", None)
-        self.top_p: Optional[float] = getattr(self.cfg, "top_p", None)
-        self.top_k: Optional[int] = getattr(self.cfg, "top_k", None)
+        self.result_dir: Path = project_dir / "evaluator" / "likelihood" / "result"
+        self.result_dir.mkdir(parents=True, exist_ok=True)
+
+        self.structure_dir: Path = project_dir / "sampler" / "structure"
+
+        self.batch_size: int = cfg.batch_size
+
+        self.mode: Optional[str] = getattr(cfg, "mode", None)
+        self.lower: Optional[float] = getattr(cfg, "lower", None)
+        self.upper: Optional[float] = getattr(cfg, "upper", None)
+
+        self.threshold: Optional[float] = getattr(cfg, "threshold", None)
+        self.top_p: Optional[float] = getattr(cfg, "top_p", None)
+        self.top_k: Optional[int] = getattr(cfg, "top_k", None)
 
         self.model = (
-            EsmForMaskedLM.from_pretrained(self.cfg.model_name_or_path)
+            EsmForMaskedLM.from_pretrained(cfg.model_name_or_path)
             .to(self.device)
             .eval()
         )
-        self.tokenizer = AutoTokenizer.from_pretrained(self.cfg.model_name_or_path)
+        self.tokenizer = AutoTokenizer.from_pretrained(cfg.model_name_or_path)
 
-    def _get_structure(
+    def _get_seq3di(
         self,
         pdb_path: Path,
         chains: Optional[List[str]] = None,
-    ) -> Dict[str, Tuple[str, str]]:
+    ) -> Dict[str, str]:
         """
         Args:
             pdb_path (Path): PDBファイルのパス
             chains (Optional[List[str]]): 取得したいチェインのリスト
 
         Returns:
-            Dict[str, Tuple[str, str]]: タンパク質の構造の辞書
+            Dict[str, str]: タンパク質の構造の辞書
         """
         with tempfile.TemporaryDirectory() as fp:
             output_path = Path(fp) / "output"
@@ -72,23 +86,29 @@ class Likelihood:
             ]
             subprocess.run(command, check=True)
 
-            results: Dict[str, Tuple[str, str]] = {}
+            results: Dict[str, str] = {}
 
             with output_path.open() as f:
                 for line in f:
-                    desc, sequence, structure = line.strip().split("\t")[:3]
-                    chain = desc.split(" ")[0].replace(pdb_path.name, "").split("_")[-1]
+                    header, _, seq3di = line.strip().split("\t")[:3]
+                    chain = (
+                        header.split(" ")[0].replace(pdb_path.name, "").split("_")[-1]
+                    )
 
                     if chain in (chains or ["A"]):
-                        results[chain] = (sequence, structure)
+                        results[chain] = seq3di
 
             return results
 
     @torch.inference_mode()
-    def _log_likelihood(self, sequences: Sequence[str]) -> List[float]:
+    def _log_likelihood(
+        self, wt_sequence: str, seq3di: str, sequences: List[str]
+    ) -> List[float]:
         """
         Args:
-            sequences (Sequence[str]): タンパク質のリスト
+            wt_sequence (str): 野生型のタンパク質
+            seq3di (str): 野生型のタンパク質の構造
+            sequences (List[str]): タンパク質のリスト
 
         Returns:
             List[float]: 各タンパク質の対数尤度
@@ -96,8 +116,6 @@ class Likelihood:
         vocab = "pynwrqhgdlvtmfsaeikc#"
 
         lls: List[float] = []
-
-        wt_sequence, structure = self._get_structure(self.pdb_path)["A"]
 
         for seq in sequences:
             masked_sequences = []
@@ -108,7 +126,7 @@ class Likelihood:
             ]
 
             for i in indices:
-                tokens = [aa + structure[j] for j, aa in enumerate(wt_sequence)]
+                tokens = [aa + seq3di[j] for j, aa in enumerate(wt_sequence)]
                 tokens[i] = "#" + tokens[i][-1]
                 masked_sequences.append(" ".join(tokens))
                 positions.append(i + 1)
@@ -143,74 +161,53 @@ class Likelihood:
 
         return lls
 
-    def _score(self, sequences: Sequence[str]) -> List[float]:
+    def _score(self, sequences: List[str], pdb_path: Path) -> List[float]:
         """
         Args:
-            sequences (Sequence[str]): タンパク質のリスト
+            sequences (List[str]): タンパク質のリスト
+            pdb_path (Path): PDBファイルのパス
 
         Returns:
             List[float]: 各タンパク質の対数尤度
         """
+        seq3di = self._get_seq3di(pdb_path)["A"]
+
         scores: List[float] = []
 
-        for i in trange(0, len(sequences), self.batch_size, disable=not self.debug):
+        for i in trange(
+            0,
+            len(sequences),
+            self.batch_size,
+            desc="Computing likelihoods",
+            disable=not self.debug,
+        ):
             batch = sequences[i : i + self.batch_size]
-            outputs = self._log_likelihood(batch)
+            outputs = self._log_likelihood(sequences[0], seq3di, batch)
             scores.extend(outputs)
 
         return scores
 
-    def _sort(
-        self,
-        sequences: Sequence[str],
-        scores: Sequence[float],
-    ) -> List[Tuple[str, float]]:
+    def filter(self, samples: Dict[str, List[str]]) -> List[str]:
         """
         Args:
-            sequences (Sequence[str]): ソートしたいタンパク質のリスト
-            scores (Sequence[float]): ソートしたいタンパク質の予測値
-
-        Returns:
-            List[Tuple[str, float]]: ソートされたリスト
-        """
-        if self.mode == "max":
-            indices = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)
-
-        elif self.mode == "min":
-            indices = sorted(range(len(scores)), key=lambda i: scores[i])
-
-        elif self.mode == "range":
-            assert self.lower is not None and self.upper is not None
-
-            center = 0.5 * (self.lower + self.upper)
-
-            def key(i: int):
-                score = scores[i]
-                if self.lower <= score <= self.upper:
-                    return (0.0, abs(score - center))
-                dist = (
-                    (self.lower - score) if score < self.lower else (score - self.upper)
-                )
-                return (abs(dist), abs(score - center))
-
-            indices = sorted(range(len(scores)), key=key)
-
-        else:
-            indices = []
-
-        return [(sequences[i], scores[i]) for i in indices]
-
-    def filter(self, sequences: Sequence[str], pdb_path: Path) -> List[str]:
-        """
-        Args:
-            sequences (Sequence[str]): タンパク質のリスト
-            pdb_path (Path): PDBファイルのパス
+            samples (Dict[str, List[str]]): サンプリングされたタンパク質の辞書
 
         Returns:
             List[str]: スクリーニングされたタンパク質のリスト
         """
-        self.pdb_path = pdb_path
-        scores = self._score(sequences)
+        sequences: List[str] = []
+        scores: List[float] = []
+
+        for id, sample in samples.items():
+            pdb_path = next(self.structure_dir.glob(f"{id}_unrelaxed_rank_001_*.pdb"))
+            sequences.extend(sample)
+            scores.extend(self._score(sample, pdb_path))
+
+        save_path = self.result_dir / f"iter{self.state.iteration}.csv"
+        self._save(sequences, scores, save_path)
+
+        save_path = self.figure_dir / f"iter{self.state.iteration}.png"
+        self._plot(scores, save_path)
 
         if self.threshold is not None:
             return [seq for seq, sc in zip(sequences, scores) if sc >= self.threshold]

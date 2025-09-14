@@ -4,6 +4,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Dict, List, Mapping, Optional
 
+import joblib
 import numpy as np
 import optuna
 import pandas as pd
@@ -14,6 +15,7 @@ from peft import LoraConfig, PeftModel, TaskType, get_peft_model
 from sklearn.metrics import r2_score
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import PowerTransformer, RobustScaler
+from tqdm import trange
 from transformers import (
     AutoTokenizer,
     BatchEncoding,
@@ -37,69 +39,65 @@ class Predictor:
     タンパク質の機能を予測するクラス
     """
 
-    def __init__(self, cfg: Mapping[str, object]) -> None:
+    def __init__(self, cfg: Mapping[str, Any], name: str) -> None:
         """
         Args:
-            cfg (Mapping[str, object]): 設定
+            cfg (Mapping[str, Any]): 設定
+            name (str): 予測器の名前
         """
-        self.cfg = SimpleNamespace(**cfg)
+        cfg = SimpleNamespace(**cfg)
 
-        self.seed: int = self.cfg.seed
-        self.debug: bool = self.cfg.debug
-        self.device: torch.device = self.cfg.device
+        self.seed: int = cfg.seed
+        self.debug: bool = cfg.debug
+        self.device: torch.device = cfg.device
 
-        project_dir: Path = Path("runs") / self.cfg.project
+        self.name: str = name
 
-        self.csv_path: Path = project_dir / "data" / "input.csv"
+        self.project_dir: Path = Path("runs") / cfg.project
 
-        self.save_dir = project_dir / "predictor" / self.cfg.target / "weight"
-        self.save_dir.mkdir(parents=True, exist_ok=True)
+        self.weight_dir = self.project_dir / "predictor" / self.name / "weight"
+        self.weight_dir.mkdir(parents=True, exist_ok=True)
 
         self.checkpoint_dir: Path = (
-            project_dir / "predictor" / self.cfg.target / "checkpoint"
+            self.project_dir / "predictor" / self.name / "checkpoint"
         )
         self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
-        self.batch_size: int = self.cfg.batch_size
+        self.batch_size: int = cfg.batch_size
+        self.test_size: float = cfg.test_size
+        self.num_epochs: int = cfg.num_epochs
+        self.patience: int = cfg.patience
 
-        self.target: str = self.cfg.target
-        self.test_size: float = self.cfg.test_size
+        self.mutate_per_samples: int = cfg.mutate_per_samples
+        self.num_mutations: int = cfg.num_mutations
 
-        self.num_epochs: int = self.cfg.num_epochs
-        self.patience: int = self.cfg.patience
+        self.destruct_per_samples: int = cfg.destruct_per_samples
+        self.num_destructions: int = cfg.num_destructions
 
-        self.mutate_per_samples: int = self.cfg.mutate_per_samples
-        self.num_mutations: int = self.cfg.num_mutations
+        self.noise_ratio: float = cfg.noise_ratio
+        self.num_trials: int = cfg.num_trials
 
-        self.destruct_per_samples: int = self.cfg.destruct_per_samples
-        self.num_destructions: int = self.cfg.num_destructions
+        self.model_name_or_path: str = cfg.model_name_or_path
+        self.model = None
+        self.tokenizer = AutoTokenizer.from_pretrained(self.model_name_or_path)
 
-        self.noise_ratio: float = self.cfg.noise_ratio
-        self.num_trials: int = self.cfg.num_trials
+        csv_path = self.project_dir / "data" / "input.csv"
+        df = pd.read_csv(csv_path)
+        self.sequences: List[str] = df["sequence"].tolist()
+        self.labels: List[float] = df[self.name].tolist()
 
         random.seed(self.seed)
         np.random.seed(self.seed)
 
-        self.model_name_or_path: str = self.cfg.model_name_or_path
-        self.model = None
-        self.tokenizer = AutoTokenizer.from_pretrained(self.model_name_or_path)
-
-        self._prepare()
-
     def _prepare(self) -> None:
-        df = pd.read_csv(self.csv_path)
+        X = np.array(self.sequences)
+        y = np.array(self.labels)
 
-        threshold = df[self.target].quantile(0.98)
-        df = df[df[self.target] <= threshold]
+        threshold = np.quantile(y, 0.98)
+        mask = y <= threshold
 
-        method = "box-cox" if (df[self.target] > 0).all() else "yeo-johnson"
-        self.transformer = PowerTransformer(method=method)
-        df[self.target] = self.transformer.fit_transform(
-            df[self.target].to_numpy().reshape(-1, 1)
-        ).flatten()
-
-        sequences = df["sequence"].tolist()
-        labels = df[self.target].tolist()
+        X = X[mask]
+        y = y[mask]
 
         (
             self.X_train,
@@ -107,8 +105,8 @@ class Predictor:
             self.y_train,
             self.y_test,
         ) = train_test_split(
-            sequences,
-            labels,
+            X.tolist(),
+            y.tolist(),
             test_size=self.test_size,
             random_state=self.seed,
         )
@@ -162,7 +160,10 @@ class Predictor:
                 positions = random.sample(range(len(sequence)), k=self.num_destructions)
 
             for pos in positions:
-                candidates = conserve(sequence[pos], upper=-1)
+                aa = sequence[pos]
+                candidates = conserve(aa, upper=-1)
+                if not candidates:
+                    candidates = conserve(aa, upper=0)
                 sequence[pos] = random.choice(candidates)
 
             sequence = "".join(sequence)
@@ -184,7 +185,10 @@ class Predictor:
                 positions = random.sample(range(len(sequence)), k=self.num_mutations)
 
             for pos in positions:
-                candidates = conserve(sequence[pos], lower=1)
+                aa = sequence[pos]
+                candidates = conserve(aa, lower=1)
+                if not candidates:
+                    candidates = conserve(aa, lower=0)
                 sequence[pos] = random.choice(candidates)
 
             sequence = "".join(sequence)
@@ -231,7 +235,7 @@ class Predictor:
             )
             sequence = destruct(sequence, indices.tolist())
             X_train.append(sequence)
-            y_train.append(0.0)
+            y_train.append(1e-6)
 
         self.X_train.extend(X_train)
         self.y_train.extend(y_train)
@@ -251,6 +255,16 @@ class Predictor:
         self.X_train.extend(X_train)
         self.y_train.extend(y_train)
 
+        method = "box-cox" if np.min(self.y_train) > 0 else "yeo-johnson"
+        self.transformer = PowerTransformer(method=method)
+        self.y_train = self.transformer.fit_transform(
+            np.array(self.y_train).reshape(-1, 1)
+        ).flatten()
+        self.y_test = self.transformer.transform(
+            np.array(self.y_test).reshape(-1, 1)
+        ).flatten()
+        joblib.dump(self.transformer, self.weight_dir / "transformer.joblib")
+
         self.scaler = RobustScaler()
         self.y_train = self.scaler.fit_transform(
             np.array(self.y_train).reshape(-1, 1)
@@ -258,12 +272,15 @@ class Predictor:
         self.y_test = self.scaler.transform(
             np.array(self.y_test).reshape(-1, 1)
         ).flatten()
+        joblib.dump(self.scaler, self.weight_dir / "scaler.joblib")
 
         del model
         gc.collect()
         torch.cuda.empty_cache()
 
     def train(self) -> None:
+        self._prepare()
+
         if not self.debug:
             optuna.logging.set_verbosity(optuna.logging.WARNING)
 
@@ -334,13 +351,13 @@ class Predictor:
         args = TrainingArguments(
             output_dir=self.checkpoint_dir,
             eval_strategy="epoch",
-            per_device_train_batch_size=1,
-            per_device_eval_batch_size=1,
+            per_device_train_batch_size=8,
+            per_device_eval_batch_size=8,
             num_train_epochs=self.num_epochs,
             seed=self.seed,
             report_to="none",
             save_strategy="no",
-            save_total_limit=1,
+            save_total_limit=2,
             fp16=True,
             fp16_full_eval=True,
             metric_for_best_model="r2",
@@ -354,7 +371,7 @@ class Predictor:
                 pred (EvalPrediction): 予測オブジェクト
 
             Returns:
-                Dict[str, float]: 決定係数
+                Dict[str, float]: 評価指標
             """
             y_pred = pred.predictions.reshape(-1, 1)
             y_pred = self.transformer.inverse_transform(
@@ -425,24 +442,13 @@ class Predictor:
         trainer.train()
 
         self.model = trainer.model.eval()
-        self.model.save_pretrained(self.save_dir)
-        self.tokenizer.save_pretrained(self.save_dir)
+        torch.save(self.model, self.weight_dir / "model.pt")
 
     def load(self) -> None:
-        model = EsmModel.from_pretrained(
-            self.model_name_or_path, torch_dtype=torch.float16
-        ).to(self.device)
-        regressor = Regressor(model, model.config.hidden_size)
-
-        self.model = (
-            PeftModel.from_pretrained(
-                regressor,
-                self.save_dir,
-                is_trainable=False,
-            )
-            .to(self.device)
-            .eval()
-        )
+        self.model = torch.load(self.weight_dir / "model.pt", weights_only=False)
+        self.model.to(self.device, dtype=torch.float16).eval()
+        self.transformer = joblib.load(self.weight_dir / "transformer.joblib")
+        self.scaler = joblib.load(self.weight_dir / "scaler.joblib")
 
     def predict(self, sequences: List[str]) -> List[float]:
         """
@@ -454,7 +460,13 @@ class Predictor:
         """
         outputs: List[float] = []
 
-        for i in range(0, len(sequences), self.batch_size):
+        for i in trange(
+            0,
+            len(sequences),
+            self.batch_size,
+            desc="Predicting fitness",
+            disable=not self.debug,
+        ):
             batch = sequences[i : i + self.batch_size]
             inputs = self.tokenizer(
                 batch,

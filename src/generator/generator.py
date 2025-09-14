@@ -2,8 +2,6 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Dict, List, Mapping, Optional
 
-import numpy as np
-import optuna
 import torch
 from Bio.Data import IUPACData
 from datasets import Dataset
@@ -21,6 +19,8 @@ from transformers import (
     logging,
 )
 
+from src.state.state import State
+
 logging.set_verbosity_error()
 
 
@@ -29,40 +29,40 @@ class Generator:
     タンパク質を生成するクラス
     """
 
-    def __init__(self, cfg: Mapping[str, object] = None) -> None:
+    def __init__(self, cfg: Mapping[str, Any], state: State) -> None:
         """
         Args:
-            cfg (Mapping[str, object]): 設定
+            cfg (Mapping[str, Any]): 設定
         """
-        self.cfg = SimpleNamespace(**cfg)
+        cfg = SimpleNamespace(**cfg)
+        self.state = state
 
-        self.seed: int = self.cfg.seed
-        self.debug: bool = self.cfg.debug
-        self.device: torch.device = self.cfg.device
+        self.seed: int = cfg.seed
+        self.debug: bool = cfg.debug
+        self.device: torch.device = cfg.device
 
-        self.project_dir: Path = Path("runs") / self.cfg.project
+        self.project_dir: Path = Path("runs") / cfg.project
 
-        self.save_dir = self.project_dir / "generator" / "weight"
-        self.save_dir.mkdir(parents=True, exist_ok=True)
+        self.weight_dir = self.project_dir / "generator" / "weight"
+        self.weight_dir.mkdir(parents=True, exist_ok=True)
 
         self.checkpoint_dir: Path = self.project_dir / "generator" / "checkpoint"
         self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
-        self.batch_size: int = self.cfg.batch_size
-        self.test_size: float = self.cfg.test_size
+        self.batch_size: int = cfg.batch_size
+        self.test_size: float = cfg.test_size
 
-        self.r: int = self.cfg.r
-        self.lora_alpha: int = self.cfg.lora_alpha
-        self.lora_dropout: float = self.cfg.lora_dropout
+        self.r: int = cfg.r
+        self.lora_alpha: int = cfg.lora_alpha
+        self.lora_dropout: float = cfg.lora_dropout
 
-        self.num_epochs: int = self.cfg.num_epochs
-        self.patience: int = self.cfg.patience
+        self.num_epochs: int = cfg.num_epochs
+        self.patience: int = cfg.patience
 
-        self.num_samples: int = self.cfg.num_samples
-        self.num_trials: int = self.cfg.num_trials
-        self.prompt: str = self.cfg.prompt
+        self.max_new_token: int = cfg.max_new_token
+        self.prompt: str = cfg.prompt
 
-        self.model_name_or_path: str = self.cfg.model_name_or_path
+        self.model_name_or_path: str = cfg.model_name_or_path
         self.model = None
         self.tokenizer = AutoTokenizer.from_pretrained(
             self.model_name_or_path,
@@ -70,90 +70,12 @@ class Generator:
         )
         self.tokenizer.pad_token = self.tokenizer.eos_token
 
-        self.var: float = 0.0
-        self.best_params: Dict[str, Any] = {}
-
-    @torch.inference_mode()
-    def _embed(self, sequences: List[str]) -> torch.Tensor:
+    def train(
+        self,
+        sequences: List[str],
+    ) -> None:
         """
         Args:
-            sequences (List[str]): タンパク質のリスト
-
-        Returns:
-            torch.Tensor: 埋め込みベクトル
-        """
-        results: List[torch.Tensor] = []
-
-        for i in range(0, len(sequences), self.batch_size):
-            batch = sequences[i : i + self.batch_size]
-            inputs = self.tokenizer(
-                batch,
-                padding=True,
-                truncation=True,
-                max_length=256,
-                return_tensors="pt",
-            ).to(self.device)
-
-            outputs = self.model(**inputs, output_hidden_states=True)
-            last_hidden_state = outputs.hidden_states[-1]
-            attention_mask = inputs["attention_mask"]
-            extended_attention_mask = attention_mask.unsqueeze(-1)
-            pooled_output = (last_hidden_state * extended_attention_mask).sum(
-                1
-            ) / extended_attention_mask.sum(1)
-            results.append(pooled_output.detach().cpu())
-
-        results = torch.cat(results, dim=0)
-
-        return results
-
-    def _objective(self, trial: optuna.trial.Trial) -> float:
-        temperature = trial.suggest_float("temperature", 0.01, 1.5)
-        sequences = self.generate(self.num_samples, temperature=temperature)
-
-        try:
-            outputs = self._embed(sequences).numpy()
-            var = float(np.var(outputs, axis=0).mean())
-            trial.set_user_attr("var", var)
-
-            if self.var <= 0:
-                return 0.0
-
-            lower = 0.60 * self.var
-            upper = 0.90 * self.var
-            penalty = max(0.0, lower - var) + max(0.0, var - upper)
-            score = 1.0 / (1.0 + penalty)
-
-            return score
-
-        except Exception:
-            return 0.0
-
-    def tune(self) -> None:
-        if not self.debug:
-            optuna.logging.set_verbosity(optuna.logging.WARNING)
-
-        if not self.best_params:
-            sequences = self.generate(self.num_samples, temperature=1.5)
-            outputs = self._embed(sequences).numpy()
-            var = float(np.var(outputs, axis=0).mean())
-            self.var = var
-            self.best_params = {"temperature": 1.5}
-
-        study = optuna.create_study(
-            direction="maximize",
-            sampler=optuna.samplers.TPESampler(seed=self.seed),
-            pruner=optuna.pruners.MedianPruner(n_warmup_steps=1),
-        )
-        study.optimize(self._objective, n_trials=self.num_trials)
-
-        self.var = study.best_trial.user_attrs["var"]
-        self.best_params = study.best_params
-
-    def train(self, iteration: int, sequences: List[str]) -> None:
-        """
-        Args:
-            iteration (int): イテレーション数
             sequences (List[str]): タンパク質のリスト
         """
         train, test = train_test_split(
@@ -223,7 +145,7 @@ class Generator:
             seed=self.seed,
             report_to="none",
             save_strategy="epoch",
-            save_total_limit=1,
+            save_total_limit=2,
             fp16=True,
             fp16_full_eval=True,
             load_best_model_at_end=True,
@@ -245,30 +167,13 @@ class Generator:
         trainer.train()
 
         self.model = trainer.model.eval()
-        self.model.save_pretrained(self.save_dir / str(iteration))
-        self.tokenizer.save_pretrained(self.save_dir / str(iteration))
+        torch.save(self.model, self.weight_dir / f"iter{self.state.iteration}.pt")
 
-    def load(self, iteration: int) -> None:
-        """
-        Args:
-            iteration (int): イテレーション数
-        """
-        model = AutoModelForCausalLM.from_pretrained(
-            self.model_name_or_path,
-            trust_remote_code=True,
-            torch_dtype=torch.float16,
-        ).to(self.device)
-
-        self.model = (
-            PeftModel.from_pretrained(
-                model,
-                self.save_dir / str(iteration),
-                is_trainable=False,
-            )
-            .to(self.device)
-            .eval()
+    def load(self) -> None:
+        self.model = torch.load(
+            self.weight_dir / f"iter{self.state.iteration}.pt", weights_only=False
         )
-        self.model.config.num_hidden_layers = len(self.model.transformer.h)
+        self.model.to(self.device, dtype=torch.float16).eval()
 
     @torch.inference_mode()
     def generate(
@@ -276,7 +181,7 @@ class Generator:
         num_sequences: Optional[int] = 1,
         top_k: Optional[int] = 10,
         top_p: Optional[float] = 0.90,
-        temperature: Optional[float] = None,
+        temperature: Optional[float] = 1.5,
     ) -> List[str]:
         """
         Args:
@@ -288,8 +193,6 @@ class Generator:
         Returns:
             List[str]: 生成されたタンパク質のリスト
         """
-        if temperature is None:
-            temperature = self.best_params.get("temperature", 1.0)
 
         def prefix_allowed_tokens_fn(_batch_id, _input_ids):
             return [
@@ -299,7 +202,13 @@ class Generator:
 
         sequences: List[str] = []
 
-        for _ in trange(0, num_sequences, self.batch_size, disable=not self.debug):
+        for _ in trange(
+            0,
+            num_sequences,
+            self.batch_size,
+            desc="Generating sequences",
+            disable=not self.debug,
+        ):
             batch_size = min(self.batch_size, num_sequences - len(sequences))
 
             input_ids = self.tokenizer.encode(self.prompt, return_tensors="pt").to(
@@ -308,7 +217,7 @@ class Generator:
 
             outputs = self.model.generate(
                 input_ids=input_ids,
-                max_new_tokens=256,
+                max_new_tokens=self.max_new_token,
                 temperature=temperature,
                 top_k=top_k,
                 top_p=top_p,

@@ -5,7 +5,6 @@ device: cuda
 seed: 42
 
 sampler:
-  model_name_or_path: facebook/esmfold_v1
   num_shuffles: 100000
   shuffle_rate: 0.04
   window_sizes: [1, 3, 5]
@@ -13,47 +12,47 @@ sampler:
 predictor:
   ex:
     batch_size: 16
-    destruct_per_samples: 2
-    model_name_or_path: facebook/esm2_t33_650M_UR50D
+    destruct_per_samples: 0
+    model_name_or_path: facebook/esm2_t30_150M_UR50D
     mutate_per_samples: 5
     noise_ratio: 0.1
     num_destructions: 2
     num_epochs: 100
     num_mutations: 2
     num_trials: 30
-    patience: 5
-    target: ex
+    patience: 10
     test_size: 0.2
   
   em:
     batch_size: 16
-    destruct_per_samples: 2
-    model_name_or_path: facebook/esm2_t33_650M_UR50D
+    destruct_per_samples: 0
+    model_name_or_path: facebook/esm2_t30_150M_UR50D
     mutate_per_samples: 5
     noise_ratio: 0.1
     num_destructions: 2
     num_epochs: 100
     num_mutations: 2
     num_trials: 30
-    patience: 5
-    target: em
+    patience: 10
     test_size: 0.2
 
   brightness:
     batch_size: 16
     destruct_per_samples: 2
-    model_name_or_path: facebook/esm2_t33_650M_UR50D
+    model_name_or_path: facebook/esm2_t30_150M_UR50D
     mutate_per_samples: 5
     noise_ratio: 0.1
     num_destructions: 2
     num_epochs: 100
     num_mutations: 2
     num_trials: 30
-    patience: 5
-    target: brightness
+    patience: 10
     test_size: 0.2
 
 evaluator:
+  hamiltonian:
+    threshold: -5.0
+
   likelihood:
     batch_size: 32
     model_name_or_path: westlake-repl/SaProt_650M_AF2
@@ -91,10 +90,9 @@ generator:
   batch_size: 32
   lora_alpha: 8
   lora_dropout: 0.1
+  max_new_token: 233
   model_name_or_path: hugohrban/progen2-small
   num_epochs: 6
-  num_samples: 300
-  num_trials: 30
   patience: 3
   prompt: MSKGE
   r: 8
@@ -103,9 +101,9 @@ generator:
 early_stopper:
   batch_size: 32
   model_name_or_path: facebook/esm2_t33_650M_UR50D
-  num_samples: 600
+  num_samples: 1000
   patience: 5
 
 runner:
   num_iterations: 35
-  num_sequences: 50000
+  num_sequences: 20000

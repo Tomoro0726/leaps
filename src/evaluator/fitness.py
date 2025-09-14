@@ -1,121 +1,102 @@
+from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Mapping, Optional
 
 import torch
-from tqdm import trange
 
+from src.evaluator.evaluator import Evaluator
 from src.predictor.predictor import Predictor
+from src.state.state import State
 
 
-class Fitness:
+class Fitness(Evaluator):
     """
     機能でスクリーニングするクラス
     """
 
-    def __init__(self, cfg: Mapping[str, object], predictor: Predictor) -> None:
+    def __init__(
+        self, cfg: Mapping[str, Any], state: State, name: str, predictor: Predictor
+    ) -> None:
         """
         Args:
-            cfg (Mapping[str, object]): 設定
+            cfg (Mapping[str, Any]): 設定
+            state (State): 状態
+            name (str): 評価器の名前
             predictor (Predictor): 予測器
         """
-        self.cfg = SimpleNamespace(**cfg)
+        cfg = SimpleNamespace(**cfg)
+        self.state = state
 
-        self.debug: bool = self.cfg.debug
-        self.device: torch.device = self.cfg.device
+        self.debug: bool = cfg.debug
+        self.device: torch.device = cfg.device
 
-        self.batch_size: int = self.cfg.batch_size
+        project_dir: Path = Path("runs") / cfg.project
 
-        self.mode: Optional[str] = getattr(self.cfg, "mode", None)
-        self.lower: Optional[float] = getattr(self.cfg, "lower", None)
-        self.upper: Optional[float] = getattr(self.cfg, "upper", None)
+        self.figure_dir: Path = project_dir / "evaluator" / "fitness" / name / "figure"
+        self.figure_dir.mkdir(parents=True, exist_ok=True)
 
-        self.series: Dict[str, Any] = self.cfg.series
-        self.parallel: Dict[str, Any] = self.cfg.parallel
+        self.result_dir: Path = project_dir / "evaluator" / "fitness" / name / "result"
+        self.result_dir.mkdir(parents=True, exist_ok=True)
+
+        self.batch_size: int = cfg.batch_size
+
+        self.mode: Optional[str] = getattr(cfg, "mode", None)
+        self.lower: Optional[float] = getattr(cfg, "lower", None)
+        self.upper: Optional[float] = getattr(cfg, "upper", None)
+
+        self.series: Dict[str, Any] = cfg.series
+        self.parallel: Dict[str, Any] = cfg.parallel
 
         self.predictor = predictor
 
     @torch.inference_mode()
-    def _predict(self, sequences: Sequence[str]) -> List[float]:
+    def _predict(self, sequences: List[str]) -> List[float]:
         """
         Args:
-            sequences (Sequence[str]): タンパク質のリスト
+            sequences (List[str]): タンパク質のリスト
 
         Returns:
             List[float]: 各タンパク質の予測値
         """
         outputs = self.predictor.predict(sequences)
+
         return outputs
 
-    def _score(self, sequences: Sequence[str]) -> List[float]:
+    def _score(self, sequences: List[str]) -> List[float]:
         """
         Args:
-            sequences (Sequence[str]): タンパク質のリスト
+            sequences (List[str]): タンパク質のリスト
 
         Returns:
             List[float]: 各タンパク質の予測値
         """
         scores: List[float] = []
 
-        for i in trange(0, len(sequences), self.batch_size, disable=not self.debug):
+        for i in range(0, len(sequences), self.batch_size):
             batch = sequences[i : i + self.batch_size]
             outputs = self._predict(batch)
             scores.extend(outputs)
 
         return scores
 
-    def _sort(
-        self,
-        sequences: Sequence[str],
-        scores: Sequence[float],
-    ) -> List[Tuple[str, float]]:
+    def filter(self, sequences: List[str], strategy: str) -> List[str]:
         """
         Args:
-            sequences (Sequence[str]): ソートしたいタンパク質のリスト
-            scores (Sequence[float]): ソートしたいタンパク質の予測値
-
-        Returns:
-            List[Tuple[str, float]]: ソートされたリスト
-        """
-
-        if self.mode == "max":
-            indices = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)
-
-        elif self.mode == "min":
-            indices = sorted(range(len(scores)), key=lambda i: scores[i])
-
-        elif self.mode == "range":
-            assert self.lower is not None and self.upper is not None
-
-            center = 0.5 * (self.lower + self.upper)
-
-            def key(i: int):
-                score = scores[i]
-                if self.lower <= score <= self.upper:
-                    return (0.0, abs(score - center))
-                dist = (
-                    (self.lower - score) if score < self.lower else (score - self.upper)
-                )
-                return (abs(dist), abs(score - center))
-
-            indices = sorted(range(len(scores)), key=key)
-
-        else:
-            indices = []
-
-        return [(sequences[i], scores[i]) for i in indices]
-
-    def filter(self, sequences: Sequence[str], strategy: str) -> List[str]:
-        """
-        Args:
-            sequences (Sequence[str]): タンパク質のリスト
-            strategy (str): スクリーニングの戦略（"series" または "parallel"）
+            sequences (List[str]): タンパク質のリスト
+            strategy (str): スクリーニングの戦略
 
         Returns:
             List[str]: スクリーニングされたタンパク質のリスト
         """
+        assert strategy in ["series", "parallel"]
+
         scores = self._score(sequences)
 
-        assert strategy in ["series", "parallel"]
+        save_path = self.result_dir / strategy / f"iter{self.state.iteration}.csv"
+        self._save(sequences, scores, save_path)
+
+        save_path = self.figure_dir / strategy / f"iter{self.state.iteration}.png"
+        self._plot(scores, save_path)
 
         if strategy == "series":
             threshold = self.series.get("threshold")
