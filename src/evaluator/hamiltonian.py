@@ -109,7 +109,7 @@ class Hamiltonian(Evaluator):
         header: str | None = None
         buffer: List[str] = []
 
-        a3m_path = self.msa_dir / f"{self.name}.a3m"
+        a3m_path = self.msa_dir / f"{self.id}.a3m"
         with open(a3m_path) as f:
             for line in chain(f, [">"]):
                 line = line.strip()
