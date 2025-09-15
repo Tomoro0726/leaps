@@ -99,16 +99,15 @@ class Predictor:
         X = X[mask]
         y = y[mask]
 
-        (
-            self.X_train,
-            self.X_test,
-            self.y_train,
-            self.y_test,
-        ) = train_test_split(
+        bins = int(np.sqrt(len(y)))
+        stratify = pd.qcut(y, bins, labels=False)
+
+        self.X_train, self.X_test, self.y_train, self.y_test = train_test_split(
             X.tolist(),
             y.tolist(),
             test_size=self.test_size,
             random_state=self.seed,
+            stratify=stratify,
         )
 
         model = (
@@ -225,12 +224,14 @@ class Predictor:
 
             results.append((sequence, scores))
 
-        results.sort(key=lambda res: np.mean(res[1]), reverse=True)
+        weights = np.array([np.mean(res[1]) for res in results])
+        weights = np.exp(weights - weights.max())
+        results = random.choices(results, weights=weights, k=self.destruct_per_samples)
 
         X_train = []
         y_train = []
 
-        for sequence, scores in results[: self.destruct_per_samples]:
+        for sequence, scores in results:
             top_k = np.argsort(scores)[-self.num_destructions * 3 :]
             probs = np.exp(np.array(scores)[top_k])
             probs = probs / probs.sum()
@@ -245,7 +246,7 @@ class Predictor:
         self.y_train.extend(y_train)
 
         results = list(zip(self.X_train, self.y_train))
-        results = random.sample(results, k=self.mutate_per_samples)
+        results = random.choices(results, k=self.mutate_per_samples)
 
         X_train = []
         y_train = []
@@ -285,15 +286,12 @@ class Predictor:
     def train(self) -> None:
         self._prepare()
 
-        if not self.debug:
-            optuna.logging.set_verbosity(optuna.logging.WARNING)
-
         train_dataset = Dataset.from_dict(
             {"sequence": self.X_train, "labels": self.y_train}
         ).shuffle(seed=self.seed)
         eval_dataset = Dataset.from_dict(
             {"sequence": self.X_test, "labels": self.y_test}
-        )
+        ).shuffle(seed=self.seed)
 
         def tokenize(examples: Dict[str, List[str]]) -> BatchEncoding:
             """
@@ -316,7 +314,7 @@ class Predictor:
             tokenize, batched=True, remove_columns=["sequence"]
         )
 
-        best_params: Dict[str, Any] = {}
+        best_params: Dict[str, float] = {}
 
         def model_init(trial: Optional[optuna.Trial] = None) -> PeftModel:
             """
@@ -334,7 +332,7 @@ class Predictor:
             if trial is None:
                 r = best_params.get("r", 8)
                 lora_alpha = best_params.get("lora_alpha", 16)
-                lora_dropout = best_params.get("lora_dropout", 0.1)
+                lora_dropout = best_params.get("lora_dropout", 0.0)
             else:
                 r = trial.suggest_categorical("r", [4, 8, 16, 32])
                 lora_alpha = trial.suggest_categorical("lora_alpha", [8, 16, 32, 64])
@@ -358,13 +356,13 @@ class Predictor:
             per_device_train_batch_size=8,
             per_device_eval_batch_size=8,
             num_train_epochs=self.num_epochs,
-            seed=self.seed,
-            report_to="none",
             save_strategy="no",
             save_total_limit=2,
+            seed=self.seed,
             fp16=True,
             fp16_full_eval=True,
             metric_for_best_model="r2",
+            report_to="none",
         )
 
         data_collator = DataCollatorWithPadding(self.tokenizer)
@@ -417,25 +415,52 @@ class Predictor:
                 "warmup_ratio": trial.suggest_float("warmup_ratio", 0.10, 0.25),
             }
 
+        def compute_objective(metrics: Dict[str, float]) -> float:            
+            """
+            Args:
+                metrics (Dict[str, float]): 評価指標
+            
+            Returns:
+                float: 目的関数の値
+            """
+            return metrics["eval_r2"]
+
         best_trial = trainer.hyperparameter_search(
             direction="maximize",
             backend="optuna",
             hp_space=hp_space,
             n_trials=self.num_trials,
+            compute_objective=compute_objective,
         )
 
-        best_params = best_trial.hyperparameters
+        best_params = {
+            "r": best_trial.hyperparameters["r"],
+            "lora_alpha": best_trial.hyperparameters["lora_alpha"],
+            "lora_dropout": best_trial.hyperparameters["lora_dropout"],
+        }
 
-        trainer.args.learning_rate = best_params["learning_rate"]
-        trainer.args.weight_decay = best_params["weight_decay"]
-        trainer.args.warmup_ratio = best_params["warmup_ratio"]
-
-        trainer.args.load_best_model_at_end = True
-        trainer.args.save_strategy = "epoch"
-
+        args = TrainingArguments(
+            output_dir=self.checkpoint_dir,
+            eval_strategy="epoch",
+            per_device_train_batch_size=8,
+            per_device_eval_batch_size=8,
+            learning_rate=best_trial.hyperparameters["learning_rate"],
+            weight_decay=best_trial.hyperparameters["weight_decay"],
+            num_train_epochs=self.num_epochs,
+            warmup_ratio=best_trial.hyperparameters["warmup_ratio"],
+            save_strategy="epoch",
+            save_total_limit=2,
+            seed=self.seed,
+            fp16=True,
+            fp16_full_eval=True,
+            load_best_model_at_end=True,
+            metric_for_best_model="r2",
+            report_to="none",
+        )
+        
         trainer = Trainer(
             model_init=model_init,
-            args=trainer.args,
+            args=args,
             train_dataset=train_dataset,
             eval_dataset=eval_dataset,
             data_collator=data_collator,
@@ -485,7 +510,7 @@ class Predictor:
 
             outputs.append(logits.detach().reshape(-1))
 
-        outputs = torch.cat(outputs, dim=0).to(torch.float32).cpu().numpy()
+        outputs = torch.cat(outputs, dim=0).cpu().numpy()
         outputs = self.scaler.inverse_transform(outputs.reshape(-1, 1))
         outputs = self.transformer.inverse_transform(outputs).flatten()
         outputs = outputs.tolist()
