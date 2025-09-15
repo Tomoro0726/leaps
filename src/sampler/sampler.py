@@ -170,9 +170,11 @@ class Sampler:
 
         for id, sample in samples.items():
             records: List[SeqRecord] = []
+
             for i, seq in enumerate(sample, start=1):
                 record = SeqRecord(Seq(seq), id=str(i), description="")
                 records.append(record)
+
             fasta_path = self.sequence_dir / f"{id}.fasta"
             SeqIO.write(records, fasta_path, "fasta")
 

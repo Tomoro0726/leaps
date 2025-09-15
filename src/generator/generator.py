@@ -196,7 +196,7 @@ class Generator:
             """
             Args:
                 metrics (Dict[str, float]): 評価指標
-            
+
             Returns:
                 float: 目的関数の値
             """

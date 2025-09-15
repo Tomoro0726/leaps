@@ -21,7 +21,7 @@ class Dropout(nn.Module):
             x (torch.Tensor): 入力のテンソル
 
         Returns:
-            torch.Tensor: ドロップアウトしたテンソル
+            torch.Tensor: ドロップアウトされたテンソル
         """
         if not self.training:
             return x
@@ -43,4 +43,5 @@ class Dropout(nn.Module):
             scale = 1.0 / (1.0 - k / float(dim))
 
         shape = (1,) * (x.dim() - 1) + (dim,)
+
         return x * mask.view(shape) * scale

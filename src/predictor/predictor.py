@@ -1,8 +1,7 @@
-import gc
 import random
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, Dict, List, Mapping, Optional
+from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 import joblib
 import numpy as np
@@ -87,7 +86,11 @@ class Predictor:
         random.seed(self.seed)
         np.random.seed(self.seed)
 
-    def _prepare(self) -> None:
+    def _prepare(self) -> Tuple[List[str], List[str], List[float], List[float]]:
+        """
+        Returns:
+            Tuple[List[str], List[str], List[float], List[float]]: データセット
+        """
         X = np.array(self.sequences)
         y = np.array(self.labels)
 
@@ -100,7 +103,7 @@ class Predictor:
         bins = int(np.sqrt(len(y)))
         stratify = pd.qcut(y, bins, labels=False)
 
-        self.X_train, self.X_test, self.y_train, self.y_test = train_test_split(
+        X_train, X_test, y_train, y_test = train_test_split(
             X.tolist(),
             y.tolist(),
             test_size=self.test_size,
@@ -198,7 +201,7 @@ class Predictor:
 
         results = []
 
-        for sequence in self.X_train[:]:
+        for sequence in X_train:
             input_ids = self.tokenizer.encode(
                 sequence,
                 truncation=True,
@@ -207,6 +210,7 @@ class Predictor:
             ).to(self.device)
 
             scores = []
+
             for i in range(1, input_ids.shape[1] - 1):
                 masked_input_ids = input_ids.clone()
                 masked_input_ids[0, i] = self.tokenizer.mask_token_id
@@ -226,8 +230,8 @@ class Predictor:
         weights = np.exp(weights - weights.max())
         results = random.choices(results, weights=weights, k=self.destruct_per_samples)
 
-        X_train = []
-        y_train = []
+        X: List[str] = []
+        y: List[float] = []
 
         for sequence, scores in results:
             top_k = np.argsort(scores)[-self.num_destructions * 3 :]
@@ -237,58 +241,54 @@ class Predictor:
                 top_k, size=self.num_destructions, replace=False, p=probs
             )
             sequence = destruct(sequence, indices.tolist())
-            X_train.append(sequence)
-            y_train.append(1e-6)
+            X.append(sequence)
+            y.append(1e-6)
 
-        self.X_train.extend(X_train)
-        self.y_train.extend(y_train)
+        X_train.extend(X)
+        y_train.extend(y)
 
-        results = list(zip(self.X_train, self.y_train))
+        results = list(zip(X_train, y_train))
         results = random.choices(results, k=self.mutate_per_samples)
 
-        X_train = []
-        y_train = []
+        X: List[str] = []
+        y: List[float] = []
 
         for sequence, label in results:
             sequence = mutate(sequence)
             noise = random.uniform(-self.noise_ratio, self.noise_ratio)
-            X_train.append(sequence)
-            y_train.append(label * (1 + noise))
+            X.append(sequence)
+            y.append(label * (1 + noise))
 
-        self.X_train.extend(X_train)
-        self.y_train.extend(y_train)
+        X_train.extend(X)
+        y_train.extend(y)
 
-        method = "box-cox" if np.min(self.y_train) > 0 else "yeo-johnson"
+        y_train = np.array(y_train)
+        y_test = np.array(y_test)
+
+        method = "box-cox" if np.min(y_train) > 0 else "yeo-johnson"
         self.transformer = PowerTransformer(method=method)
-        self.y_train = self.transformer.fit_transform(
-            np.array(self.y_train).reshape(-1, 1)
-        ).flatten()
-        self.y_test = self.transformer.transform(
-            np.array(self.y_test).reshape(-1, 1)
-        ).flatten()
+        y_train = self.transformer.fit_transform(y_train.reshape(-1, 1)).flatten()
+        y_test = self.transformer.transform(y_test.reshape(-1, 1)).flatten()
         joblib.dump(self.transformer, self.weight_dir / "transformer.joblib")
 
         self.scaler = RobustScaler()
-        self.y_train = self.scaler.fit_transform(
-            np.array(self.y_train).reshape(-1, 1)
-        ).flatten()
-        self.y_test = self.scaler.transform(
-            np.array(self.y_test).reshape(-1, 1)
-        ).flatten()
+        y_train = self.scaler.fit_transform(y_train.reshape(-1, 1)).flatten()
+        y_test = self.scaler.transform(y_test.reshape(-1, 1)).flatten()
         joblib.dump(self.scaler, self.weight_dir / "scaler.joblib")
 
-        del model
-        gc.collect()
-        torch.cuda.empty_cache()
+        y_train = y_train.tolist()
+        y_test = y_test.tolist()
+
+        return X_train, X_test, y_train, y_test
 
     def train(self) -> None:
-        self._prepare()
+        X_train, X_test, y_train, y_test = self._prepare()
 
         train_dataset = Dataset.from_dict(
-            {"sequence": self.X_train, "labels": self.y_train}
+            {"sequence": X_train, "labels": y_train}
         ).shuffle(seed=self.seed)
         eval_dataset = Dataset.from_dict(
-            {"sequence": self.X_test, "labels": self.y_test}
+            {"sequence": X_test, "labels": y_test}
         ).shuffle(seed=self.seed)
 
         def tokenize(examples: Dict[str, List[str]]) -> BatchEncoding:
@@ -413,11 +413,11 @@ class Predictor:
                 "warmup_ratio": trial.suggest_float("warmup_ratio", 0.10, 0.25),
             }
 
-        def compute_objective(metrics: Dict[str, float]) -> float:            
+        def compute_objective(metrics: Dict[str, float]) -> float:
             """
             Args:
                 metrics (Dict[str, float]): 評価指標
-            
+
             Returns:
                 float: 目的関数の値
             """
@@ -455,7 +455,7 @@ class Predictor:
             metric_for_best_model="r2",
             report_to="none",
         )
-        
+
         trainer = Trainer(
             model_init=model_init,
             args=args,
@@ -512,8 +512,5 @@ class Predictor:
         outputs = self.scaler.inverse_transform(outputs.reshape(-1, 1))
         outputs = self.transformer.inverse_transform(outputs).flatten()
         outputs = outputs.tolist()
-
-        gc.collect()
-        torch.cuda.empty_cache()
 
         return outputs
