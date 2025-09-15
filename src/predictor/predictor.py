@@ -66,16 +66,14 @@ class Predictor:
         self.batch_size: int = cfg.batch_size
         self.test_size: float = cfg.test_size
         self.num_epochs: int = cfg.num_epochs
+        self.num_trials: int = cfg.num_trials
         self.patience: int = cfg.patience
 
         self.mutate_per_samples: int = cfg.mutate_per_samples
         self.num_mutations: int = cfg.num_mutations
-
         self.destruct_per_samples: int = cfg.destruct_per_samples
         self.num_destructions: int = cfg.num_destructions
-
         self.noise_ratio: float = cfg.noise_ratio
-        self.num_trials: int = cfg.num_trials
 
         self.model_name_or_path: str = cfg.model_name_or_path
         self.model = None
