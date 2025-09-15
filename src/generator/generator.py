@@ -135,7 +135,7 @@ class Generator:
                 lora_dropout = trial.suggest_float("lora_dropout", 0.0, 0.3, step=0.05)
 
             peft_config = LoraConfig(
-                task_type=TaskType.FEATURE_EXTRACTION,
+                task_type=TaskType.CAUSAL_LM,
                 r=r,
                 lora_alpha=lora_alpha,
                 lora_dropout=lora_dropout,
@@ -147,7 +147,7 @@ class Generator:
             return model
 
         args = TrainingArguments(
-            output_dir=self.checkpoint_dir,
+            output_dir=self.checkpoint_dir / f"iter{self.state.iteration}",
             eval_strategy="epoch",
             per_device_train_batch_size=16,
             per_device_eval_batch_size=16,
@@ -157,7 +157,6 @@ class Generator:
             seed=self.seed,
             fp16=True,
             fp16_full_eval=True,
-            metric_for_best_model="r2",
             report_to="none",
         )
 
@@ -217,7 +216,7 @@ class Generator:
         }
 
         args = TrainingArguments(
-            output_dir=self.checkpoint_dir,
+            output_dir=self.checkpoint_dir / f"iter{self.state.iteration}",
             eval_strategy="epoch",
             per_device_train_batch_size=16,
             per_device_eval_batch_size=16,

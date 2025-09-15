@@ -216,7 +216,7 @@ class Predictor:
                 masked_input_ids[0, i] = self.tokenizer.mask_token_id
 
                 with torch.no_grad():
-                    logits = model(masked_input_ids.to(self.device)).logits
+                    logits = model(masked_input_ids).logits
 
                 logits = logits[0, i]  # (V,)
                 probs = torch.log_softmax(logits, dim=-1)
