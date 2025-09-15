@@ -203,7 +203,7 @@ class Generator:
             return metrics["eval_loss"]
 
         best_trial = trainer.hyperparameter_search(
-            direction="maximize",
+            direction="minimize",
             backend="optuna",
             hp_space=hp_space,
             n_trials=self.num_trials,
