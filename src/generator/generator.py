@@ -139,7 +139,7 @@ class Generator:
                 r=r,
                 lora_alpha=lora_alpha,
                 lora_dropout=lora_dropout,
-                target_modules=["query", "key", "value"],
+                target_modules=["qkv_proj", "out_proj"],
             )
             model = get_peft_model(model, peft_config)
             model.print_trainable_parameters()
