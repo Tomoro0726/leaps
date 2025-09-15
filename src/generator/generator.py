@@ -2,6 +2,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Dict, List, Mapping, Optional
 
+import optuna
 import torch
 from Bio.Data import IUPACData
 from datasets import Dataset
@@ -51,11 +52,6 @@ class Generator:
 
         self.batch_size: int = cfg.batch_size
         self.test_size: float = cfg.test_size
-
-        self.r: int = cfg.r
-        self.lora_alpha: int = cfg.lora_alpha
-        self.lora_dropout: float = cfg.lora_dropout
-
         self.num_epochs: int = cfg.num_epochs
         self.patience: int = cfg.patience
 
@@ -85,8 +81,8 @@ class Generator:
             shuffle=True,
         )
 
-        train_dataset = Dataset.from_dict({"sequence": train})
-        test_dataset = Dataset.from_dict({"sequence": test})
+        train_dataset = Dataset.from_dict({"sequence": train}).shuffle(seed=self.seed)
+        test_dataset = Dataset.from_dict({"sequence": test}).shuffle(seed=self.seed)
 
         def tokenize(examples: Dict[str, List[str]]) -> BatchEncoding:
             """
@@ -111,8 +107,13 @@ class Generator:
             tokenize, batched=True, remove_columns=["sequence"]
         )
 
-        def model_init() -> PeftModel:
+        best_params: Dict[str, float] = {}
+
+        def model_init(trial: Optional[optuna.Trial] = None) -> PeftModel:
             """
+            Args:
+                trial (Optional[optuna.Trial]): トライアルオブジェクト
+
             Returns:
                 PeftModel: PEFTモデル
             """
@@ -123,15 +124,23 @@ class Generator:
             ).to(self.device)
             model.config.num_hidden_layers = len(model.transformer.h)
 
-            lora_config = LoraConfig(
-                task_type=TaskType.CAUSAL_LM,
-                r=self.r,
-                lora_alpha=self.lora_alpha,
-                lora_dropout=self.lora_dropout,
-                target_modules=["qkv_proj", "out_proj"],
-            )
-            model = get_peft_model(model, lora_config)
+            if trial is None:
+                r = best_params.get("r", 8)
+                lora_alpha = best_params.get("lora_alpha", 16)
+                lora_dropout = best_params.get("lora_dropout", 0.0)
+            else:
+                r = trial.suggest_categorical("r", [4, 8, 16, 32])
+                lora_alpha = trial.suggest_categorical("lora_alpha", [8, 16, 32, 64])
+                lora_dropout = trial.suggest_float("lora_dropout", 0.0, 0.3, step=0.05)
 
+            peft_config = LoraConfig(
+                task_type=TaskType.FEATURE_EXTRACTION,
+                r=r,
+                lora_alpha=lora_alpha,
+                lora_dropout=lora_dropout,
+                target_modules=["query", "key", "value"],
+            )
+            model = get_peft_model(model, peft_config)
             model.print_trainable_parameters()
 
             return model
@@ -142,17 +151,86 @@ class Generator:
             per_device_train_batch_size=16,
             per_device_eval_batch_size=16,
             num_train_epochs=self.num_epochs,
-            seed=self.seed,
-            report_to="none",
-            save_strategy="epoch",
+            save_strategy="no",
             save_total_limit=2,
+            seed=self.seed,
             fp16=True,
             fp16_full_eval=True,
-            load_best_model_at_end=True,
+            metric_for_best_model="r2",
+            report_to="none",
         )
 
         data_collator = DataCollatorForLanguageModeling(
             tokenizer=self.tokenizer, mlm=False
+        )
+
+        trainer = Trainer(
+            model_init=model_init,
+            args=args,
+            train_dataset=train_dataset,
+            eval_dataset=eval_dataset,
+            data_collator=data_collator,
+            callbacks=[EarlyStoppingCallback(early_stopping_patience=self.patience)],
+        )
+
+        def hp_space(trial: optuna.Trial) -> Dict[str, float]:
+            """
+            Args:
+                trial (optuna.Trial): トライアルオブジェクト
+
+            Returns:
+                Dict[str, float]: ハイパーパラメータ
+            """
+            return {
+                "learning_rate": trial.suggest_float(
+                    "learning_rate", 5e-6, 5e-4, log=True
+                ),
+                "weight_decay": trial.suggest_float(
+                    "weight_decay", 1e-6, 1e-3, log=True
+                ),
+                "warmup_ratio": trial.suggest_float("warmup_ratio", 0.10, 0.25),
+            }
+
+        def compute_objective(metrics: Dict[str, float]) -> float:
+            """
+            Args:
+                metrics (Dict[str, float]): 評価指標
+            
+            Returns:
+                float: 目的関数の値
+            """
+            return metrics["eval_loss"]
+
+        best_trial = trainer.hyperparameter_search(
+            direction="maximize",
+            backend="optuna",
+            hp_space=hp_space,
+            n_trials=self.num_trials,
+            compute_objective=compute_objective,
+        )
+
+        best_params = {
+            "r": best_trial.hyperparameters["r"],
+            "lora_alpha": best_trial.hyperparameters["lora_alpha"],
+            "lora_dropout": best_trial.hyperparameters["lora_dropout"],
+        }
+
+        args = TrainingArguments(
+            output_dir=self.checkpoint_dir,
+            eval_strategy="epoch",
+            per_device_train_batch_size=16,
+            per_device_eval_batch_size=16,
+            learning_rate=best_trial.hyperparameters["learning_rate"],
+            weight_decay=best_trial.hyperparameters["weight_decay"],
+            num_train_epochs=self.num_epochs,
+            warmup_ratio=best_trial.hyperparameters["warmup_ratio"],
+            save_strategy="epoch",
+            save_total_limit=2,
+            seed=self.seed,
+            fp16=True,
+            fp16_full_eval=True,
+            load_best_model_at_end=True,
+            report_to="none",
         )
 
         trainer = Trainer(
