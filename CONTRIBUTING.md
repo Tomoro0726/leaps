@@ -59,10 +59,8 @@ git pull origin dev
 **コミット方法**
 
 ```bash
-uv pip freeze > requirements.txt
 git add -A
 git commit -m "コミットメッセージ"
-pre-commit run --all-files
 git push origin HEAD
 ```
 
