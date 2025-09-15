@@ -85,13 +85,13 @@ class EarlyStopper:
             ).to(self.device)
 
             outputs = self.model(**inputs)
-            last_hidden_state = outputs.last_hidden_state
+            last_hidden_state = outputs["last_hidden_state"]
             attention_mask = inputs["attention_mask"]
-            extended_attention_mask = attention_mask.unsqueeze(-1)
-            pooled_outputs = (last_hidden_state * extended_attention_mask).sum(
+            attention_mask = attention_mask.unsqueeze(-1)
+            pooled_output = (last_hidden_state * attention_mask).sum(
                 1
-            ) / extended_attention_mask.sum(1)
-            results.append(pooled_outputs.detach().cpu())
+            ) / attention_mask.sum(1)
+            results.append(pooled_output)
 
         results = torch.cat(results, dim=0)
 
