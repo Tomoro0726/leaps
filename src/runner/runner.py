@@ -30,17 +30,20 @@ class Runner:
         """
         self.state = State()
 
-        project_dir: Path = Path("runs") / cfg.project
+        self.project_dir: Path = Path("runs") / cfg.project
 
-        data_dir: Path = project_dir / "data"
+        data_dir: Path = self.project_dir / "data"
         data_dir.mkdir(parents=True, exist_ok=True)
 
         src = csv_path
         dst: Path = data_dir / "input.csv"
         shutil.copy2(src, dst)
 
-        self.sequence_dir: Path = project_dir / "runner" / "sequence"
-        self.sequence_dir.mkdir(parents=True, exist_ok=True)
+        self.input_dir: Path = self.project_dir / "runner" / "input"
+        self.input_dir.mkdir(parents=True, exist_ok=True)
+
+        self.output_dir: Path = self.project_dir / "runner" / "output"
+        self.output_dir.mkdir(parents=True, exist_ok=True)
 
         self.num_iterations: int = cfg["runner"]["num_iterations"]
         self.num_sequences: int = cfg["runner"]["num_sequences"]
@@ -135,13 +138,19 @@ class Runner:
         """
         self.sampler.fold()
         samples: Dict[str, List[str]] = self.sampler.sample()
-        # samples: Dict[str, List[str]] = self.sampler.load()
 
-        for predictor in self.predictors.values():
-            predictor.train()
-            # predictor.load()
+        for name, predictor in self.predictors.items():
+            model_path = self.project_dir / "predictor" / name / "weight" / "model.pt"
+            if model_path.exists():
+                predictor.load()
+            else:
+                predictor.train()
 
-        self.hamiltonian.train()
+        model_path = (
+            self.project_dir / "evaluator" / "hamiltonian" / "weight" / "model.params"
+        )
+        if not model_path.exists():
+            self.hamiltonian.train()
 
         prev: List[str] | None = None
         next: List[str] | None = None
@@ -151,21 +160,39 @@ class Runner:
 
             sequences: List[str] = []
 
-            if iteration == 1:
-                sequences = self.likelihood.filter(samples)
-                sequences = self._unique(sequences)
-                sequences = self.hamiltonian.filter(sequences)
-                sequences = self._pipeline(sequences)
+            fasta_path = self.input_dir / f"iter{iteration}.fasta"
+
+            if fasta_path.exists():
+                records = list(SeqIO.parse(fasta_path, "fasta"))
+                sequences = [str(rec.seq) for rec in records]
             else:
-                sequences = self.hamiltonian.filter(next)
-                sequences = self._pipeline(sequences)
+                if iteration == 1:
+                    sequences = self.likelihood.filter(samples)
+                    sequences = self._unique(sequences)
+                    sequences = self.hamiltonian.filter(sequences)
+                    sequences = self._pipeline(sequences)
+                else:
+                    sequences = self.hamiltonian.filter(next)
+                    sequences = self._pipeline(sequences)
+                self._save(sequences, fasta_path)
 
-            fasta_path = self.sequence_dir / f"iter{iteration}.fasta"
-            self._save(sequences, fasta_path)
+            model_path = (
+                self.project_dir / "generator" / "weight" / f"iter{iteration}.pt"
+            )
+            if model_path.exists():
+                self.generator.load()
+            else:
+                self.generator.train(sequences)
 
-            self.generator.train(sequences)
-            sequences = self.generator.generate(self.num_sequences)
-            sequences = self._unique(sequences)
+            fasta_path = self.output_dir / f"iter{iteration}.fasta"
+            if fasta_path.exists():
+                records = list(SeqIO.parse(fasta_path, "fasta"))
+                sequences = [str(rec.seq) for rec in records]
+            else:
+                sequences = self.generator.generate(self.num_sequences)
+                sequences = self._unique(sequences)
+                self._save(sequences, fasta_path)
+
             next = sequences
 
             if prev is not None and self.early_stopper(prev, next):
