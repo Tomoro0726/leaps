@@ -81,7 +81,10 @@ $ python main.py
 ```
 leaps/
 ├── bin/
-│   └── foldseek
+│   ├── foldseek
+│   └── plmc
+├── data/
+│   └── input.csv             # データセット
 ├── notebooks/                # ノートブック
 │   └── example.ipynb
 ├── runs/                     # ログ
