@@ -117,11 +117,11 @@ class Runner:
 
         return outputs
 
-    def _save(self, sequences: List[str], save_path: Path) -> None:
+    def _save(self, sequences: List[str], save_path: str | Path) -> None:
         """
         Args:
             sequences (List[str]): 保存したいタンパク質のリスト
-            save_path (Path): 保存先のパス
+            save_path (str | Path): 保存先のパス
         """
         records: List[SeqRecord] = []
 

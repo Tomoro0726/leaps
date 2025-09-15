@@ -14,7 +14,7 @@ class Config(edict):
     def __init__(self, config_path: str | Path = "config.yaml") -> None:  # noqa: D401
         """
         Args:
-            path (str | Path): 設定ファイルのパス
+            config_path (str | Path): 設定ファイルのパス
         """
         config_path = Path(config_path)
 

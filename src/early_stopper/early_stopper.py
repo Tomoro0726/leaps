@@ -97,12 +97,14 @@ class EarlyStopper:
 
         return results
 
-    def _plot(self, inputs: np.ndarray, targets: np.ndarray, save_path: Path) -> None:
+    def _plot(
+        self, inputs: np.ndarray, targets: np.ndarray, save_path: str | Path
+    ) -> None:
         """
         Args:
             inputs (np.ndarray): 入力のベクトル
             targets (np.ndarray): 目的のベクトル
-            save_path (Path): 保存先のパス
+            save_path (str | Path): 保存先のパス
         """
         X = np.concatenate([inputs, targets], axis=0)
         y = np.array([0] * len(inputs) + [1] * len(targets))
