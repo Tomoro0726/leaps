@@ -53,6 +53,7 @@ class Generator:
         self.batch_size: int = cfg.batch_size
         self.test_size: float = cfg.test_size
         self.num_epochs: int = cfg.num_epochs
+        self.num_trials: int = cfg.num_trials
         self.patience: int = cfg.patience
 
         self.max_new_token: int = cfg.max_new_token

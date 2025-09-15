@@ -91,6 +91,7 @@ generator:
   max_new_token: 233
   model_name_or_path: hugohrban/progen2-small
   num_epochs: 6
+  num_trials: 30
   patience: 3
   prompt: MSKGE
   test_size: 0.1
