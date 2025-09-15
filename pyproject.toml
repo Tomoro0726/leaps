@@ -1,7 +1,7 @@
 [project]
 name = "leaps"
-version = "2.0.0"
-description = ""
+version = "3.0.0"
+description = "Language model guided Exploration of Augmented Protein Sequence space"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
