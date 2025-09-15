@@ -145,11 +145,11 @@ class Predictor:
                 and (upper is None or blosum62[i, j] <= upper)
             ]
 
-        def destruct(sequence: str, positions: List[int] | None = None) -> str:
+        def destruct(sequence: str, positions: Optional[List[int]] = None) -> str:
             """
             Args:
                 sequence (str): 破壊するタンパク質
-                positions (List[int] | None): 破壊する位置
+                positions (Optional[List[int]]): 破壊する位置
 
             Returns:
                 str: 破壊されたタンパク質
@@ -172,11 +172,11 @@ class Predictor:
 
             return sequence
 
-        def mutate(sequence: str, positions: List[int] | None = None) -> str:
+        def mutate(sequence: str, positions: Optional[List[int]] = None) -> str:
             """
             Args:
                 sequence (str): 変異させるタンパク質
-                positions (List[int] | None): 変異させる位置
+                positions (Optional[List[int]]): 変異させる位置
 
             Returns:
                 str: 変異されたタンパク質
