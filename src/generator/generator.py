@@ -42,12 +42,12 @@ class Generator:
         self.debug: bool = cfg.debug
         self.device: torch.device = cfg.device
 
-        self.project_dir: Path = Path("runs") / cfg.project
+        project_dir: Path = Path("runs") / cfg.project
 
-        self.weight_dir = self.project_dir / "generator" / "weight"
+        self.weight_dir = project_dir / "generator" / "weight"
         self.weight_dir.mkdir(parents=True, exist_ok=True)
 
-        self.checkpoint_dir: Path = self.project_dir / "generator" / "checkpoint"
+        self.checkpoint_dir: Path = project_dir / "generator" / "checkpoint"
         self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
         self.batch_size: int = cfg.batch_size

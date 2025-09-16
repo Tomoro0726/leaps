@@ -50,16 +50,12 @@ class Predictor:
         self.debug: bool = cfg.debug
         self.device: torch.device = cfg.device
 
-        self.name: str = name
+        project_dir: Path = Path("runs") / cfg.project
 
-        self.project_dir: Path = Path("runs") / cfg.project
-
-        self.weight_dir = self.project_dir / "predictor" / self.name / "weight"
+        self.weight_dir = project_dir / "predictor" / name / "weight"
         self.weight_dir.mkdir(parents=True, exist_ok=True)
 
-        self.checkpoint_dir: Path = (
-            self.project_dir / "predictor" / self.name / "checkpoint"
-        )
+        self.checkpoint_dir: Path = project_dir / "predictor" / name / "checkpoint"
         self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
         self.batch_size: int = cfg.batch_size
@@ -78,10 +74,10 @@ class Predictor:
         self.model = None
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_name_or_path)
 
-        csv_path = self.project_dir / "data" / "input.csv"
+        csv_path = project_dir / "data" / "input.csv"
         df = pd.read_csv(csv_path)
         self.sequences: List[str] = df["sequence"].tolist()
-        self.labels: List[float] = df[self.name].tolist()
+        self.labels: List[float] = df[name].tolist()
 
         random.seed(self.seed)
         np.random.seed(self.seed)

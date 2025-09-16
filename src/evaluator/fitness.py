@@ -27,9 +27,6 @@ class Fitness(Evaluator):
         cfg = SimpleNamespace(**cfg)
         self.state = state
 
-        self.debug: bool = cfg.debug
-        self.device: torch.device = cfg.device
-
         project_dir: Path = Path("runs") / cfg.project
 
         self.figure_dir: Path = project_dir / "evaluator" / "fitness" / name / "figure"
@@ -37,8 +34,6 @@ class Fitness(Evaluator):
 
         self.result_dir: Path = project_dir / "evaluator" / "fitness" / name / "result"
         self.result_dir.mkdir(parents=True, exist_ok=True)
-
-        self.batch_size: int = cfg.batch_size
 
         self.mode: Optional[str] = getattr(cfg, "mode", None)
         self.lower: Optional[float] = getattr(cfg, "lower", None)

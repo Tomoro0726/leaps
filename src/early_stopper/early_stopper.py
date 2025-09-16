@@ -30,7 +30,7 @@ class EarlyStopper:
         cfg = SimpleNamespace(**cfg)
         self.state = state
 
-        self.seed: int = cfg.seed
+        seed: int = cfg.seed
         self.debug: bool = cfg.debug
         self.device: torch.device = cfg.device
 
@@ -43,19 +43,19 @@ class EarlyStopper:
         self.patience: int = cfg.patience
         self.num_samples: int = cfg.num_samples
 
-        self.pca = PCA(n_components=2, random_state=self.seed)
+        self.pca = PCA(n_components=2, random_state=seed)
         self.xlim: Tuple[float, float] | None = None
         self.ylim: Tuple[float, float] | None = None
 
-        self.tokenizer = AutoTokenizer.from_pretrained(cfg.model_name_or_path)
         self.model = (
             EsmModel.from_pretrained(cfg.model_name_or_path).to(self.device).eval()
         )
+        self.tokenizer = AutoTokenizer.from_pretrained(cfg.model_name_or_path)
 
         self.count = 0
         self.best_score = None
 
-        random.seed(self.seed)
+        random.seed(seed)
 
     @torch.inference_mode()
     def _embed(self, sequences: List[str]) -> torch.Tensor:

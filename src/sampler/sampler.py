@@ -5,7 +5,6 @@ from types import SimpleNamespace
 from typing import Any, Dict, List, Mapping
 
 import pandas as pd
-import torch
 from Bio import SeqIO
 from Bio.Data import IUPACData
 from Bio.Seq import Seq
@@ -24,8 +23,7 @@ class Sampler:
         """
         cfg: SimpleNamespace = SimpleNamespace(**cfg)
 
-        self.seed: int = cfg.seed
-        self.device: torch.device = cfg.device
+        seed: int = cfg.seed
 
         self.project_dir: Path = Path("runs") / cfg.project
 
@@ -44,7 +42,7 @@ class Sampler:
         self.ids: List[str] = df["id"].tolist()
         self.wt_sequences: List[str] = df["sequence"].tolist()
 
-        random.seed(self.seed)
+        random.seed(seed)
 
     def _mutate(self, sequence: str) -> List[str]:
         """

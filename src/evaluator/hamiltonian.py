@@ -7,7 +7,6 @@ from typing import Any, List, Mapping, Optional
 
 import numpy as np
 import pandas as pd
-import torch
 from Bio import SeqIO
 from Bio.Data import IUPACData
 from Bio.Seq import Seq
@@ -31,9 +30,6 @@ class Hamiltonian(Evaluator):
         """
         cfg = SimpleNamespace(**cfg)
         self.state = state
-
-        self.debug: bool = cfg.debug
-        self.device: torch.device = cfg.device
 
         self.project_dir: Path = Path("runs") / cfg.project
 
