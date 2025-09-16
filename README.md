@@ -1,6 +1,6 @@
 # LEAPS
 
-![version](https://img.shields.io/badge/version-2.0.0-red.svg)
+![version](https://img.shields.io/badge/version-3.0.0-red.svg)
 ![stars](https://img.shields.io/github/stars/igem-tsukuba/leaps?color=yellow)
 ![commit-activity](https://img.shields.io/github/commit-activity/t/igem-tsukuba/leaps)
 ![license](https://img.shields.io/badge/license-MIT-green)
