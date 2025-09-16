@@ -195,7 +195,15 @@ class Hamiltonian(Evaluator):
         self._plot(scores, save_path)
 
         if self.threshold is not None:
-            return [seq for seq, sc in zip(sequences, scores) if sc >= self.threshold]
+            if self.mode == "max":
+                return [
+                    seq for seq, sc in zip(sequences, scores) if sc >= self.threshold
+                ]
+
+            if self.mode == "min":
+                return [
+                    seq for seq, sc in zip(sequences, scores) if sc <= self.threshold
+                ]
 
         results = self._sort(sequences, scores)
 

@@ -105,7 +105,7 @@ class Runner:
         for fitness in self.fitnesses:
             sequences = fitness.filter(sequences, strategy="series")
         outputs.extend(sequences)
-        
+
         outputs = self._unique(outputs)
 
         return outputs

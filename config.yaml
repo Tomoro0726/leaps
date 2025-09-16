@@ -52,11 +52,13 @@ predictor:
 evaluator:
   hamiltonian:
     threshold: -5.0
+    mode: max
 
   likelihood:
     batch_size: 32
     model_name_or_path: westlake-repl/SaProt_650M_AF2
     threshold: 0.0
+    mode: max
     
   ex:
     batch_size: 32

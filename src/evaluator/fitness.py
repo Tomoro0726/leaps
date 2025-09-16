@@ -70,12 +70,7 @@ class Fitness(Evaluator):
         Returns:
             List[float]: 各タンパク質の予測値
         """
-        scores: List[float] = []
-
-        for i in range(0, len(sequences), self.batch_size):
-            batch = sequences[i : i + self.batch_size]
-            outputs = self._predict(batch)
-            scores.extend(outputs)
+        scores: List[float] = self._predict(sequences)
 
         return scores
 
@@ -92,10 +87,14 @@ class Fitness(Evaluator):
 
         scores = self._score(sequences)
 
-        save_path = self.result_dir / strategy / f"iter{self.state.iteration}.csv"
+        save_dir = self.result_dir / strategy
+        save_dir.mkdir(parents=True, exist_ok=True)
+        save_path = save_dir / f"iter{self.state.iteration}.csv"
         self._save(sequences, scores, save_path)
 
-        save_path = self.figure_dir / strategy / f"iter{self.state.iteration}.png"
+        save_dir = self.figure_dir / strategy
+        save_dir.mkdir(parents=True, exist_ok=True)
+        save_path = save_dir / f"iter{self.state.iteration}.png"
         self._plot(scores, save_path)
 
         if strategy == "series":
@@ -109,7 +108,11 @@ class Fitness(Evaluator):
             top_k = self.parallel.get("top_k")
 
         if threshold is not None:
-            return [seq for seq, sc in zip(sequences, scores) if sc >= threshold]
+            if self.mode == "max":
+                return [seq for seq, sc in zip(sequences, scores) if sc >= threshold]
+
+            if self.mode == "min":
+                return [seq for seq, sc in zip(sequences, scores) if sc <= threshold]
 
         results = self._sort(sequences, scores)
 
