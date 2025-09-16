@@ -78,11 +78,15 @@ class Evaluator(ABC):
 
             def key(i: int):
                 score = scores[i]
+                
                 if self.lower <= score <= self.upper:
                     return (0.0, abs(score - center))
-                dist = (
-                    (self.lower - score) if score < self.lower else (score - self.upper)
-                )
+                
+                if score > self.upper:
+                    dist = score - self.upper
+                else:
+                    dist = self.lower - score
+
                 return (abs(dist), abs(score - center))
 
             indices = sorted(range(len(scores)), key=key)
