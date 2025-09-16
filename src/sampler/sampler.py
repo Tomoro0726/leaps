@@ -141,8 +141,8 @@ class Sampler:
     def fold(self) -> None:
         records: List[SeqRecord] = []
 
-        for id, seq in zip(self.ids, self.wt_sequences):
-            record = SeqRecord(Seq(seq), id=id, description="")
+        for id, wt_seq in zip(self.ids, self.wt_sequences):
+            record = SeqRecord(Seq(wt_seq), id=id, description="")
             records.append(record)
 
         fasta_path = self.project_dir / "sampler" / "query.fasta"

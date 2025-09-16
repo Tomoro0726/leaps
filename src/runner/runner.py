@@ -100,17 +100,11 @@ class Runner:
         outputs: List[str] = []
 
         for fitness in self.fitnesses:
-            outputs.extend(
-                fitness.filter(
-                    sequences, iteration=self.state.iteration, strategy="parallel"
-                )
-            )
+            outputs.extend(fitness.filter(sequences, strategy="parallel"))
         outputs = self._unique(outputs)
 
         for fitness in self.fitnesses:
-            sequences = fitness.filter(
-                sequences, iteration=self.state.iteration, strategy="series"
-            )
+            sequences = fitness.filter(sequences, strategy="series")
 
         outputs.extend(sequences)
         outputs = self._unique(outputs)
