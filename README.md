@@ -62,7 +62,7 @@ pip install -r requirements.txt
 <br/>
 
 > [!NOTE]
-> `bin`に[foldseek](https://drive.google.com/file/d/1B_9t3n_nlj8Y3Kpc_mMjtMdY0OPYa7Re/view?usp=sharing)を配置してください。
+> `bin`に[foldseek](https://github.com/steineggerlab/foldseek)と[plmc](https://github.com/debbiemarkslab/plmc)を配置してください。
 
 <br/>
 <br/>
