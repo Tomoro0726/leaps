@@ -14,7 +14,7 @@ from src.evaluator.likelihood import Likelihood
 from src.generator import Generator
 from src.predictor import Predictor
 from src.sampler import Sampler
-from src.state.state import State
+from src.state import State
 
 
 class Runner:

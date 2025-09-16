@@ -13,7 +13,7 @@ from sklearn.exceptions import NotFittedError
 from tqdm import trange
 from transformers import AutoTokenizer, EsmModel
 
-from src.state.state import State
+from src.state import State
 
 
 class EarlyStopper:

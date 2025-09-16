@@ -15,7 +15,7 @@ from Bio.SeqRecord import SeqRecord
 from evcouplings.couplings.model import CouplingsModel
 
 from src.evaluator.evaluator import Evaluator
-from src.state.state import State
+from src.state import State
 
 
 class Hamiltonian(Evaluator):

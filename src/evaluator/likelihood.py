@@ -10,7 +10,7 @@ from tqdm import trange
 from transformers import AutoTokenizer, EsmForMaskedLM
 
 from src.evaluator.evaluator import Evaluator
-from src.state.state import State
+from src.state import State
 
 
 class Likelihood(Evaluator):

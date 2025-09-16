@@ -20,7 +20,7 @@ from transformers import (
     logging,
 )
 
-from src.state.state import State
+from src.state import State
 
 logging.set_verbosity_error()
 
@@ -157,6 +157,8 @@ class Generator:
             seed=self.seed,
             fp16=True,
             fp16_full_eval=True,
+            metric_for_best_model="eval_loss",
+            greater_is_better=False,
             report_to="none",
         )
 
@@ -230,6 +232,8 @@ class Generator:
             fp16=True,
             fp16_full_eval=True,
             load_best_model_at_end=True,
+            metric_for_best_model="eval_loss",
+            greater_is_better=False,
             report_to="none",
         )
 

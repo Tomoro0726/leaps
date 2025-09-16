@@ -357,7 +357,8 @@ class Predictor:
             seed=self.seed,
             fp16=True,
             fp16_full_eval=True,
-            metric_for_best_model="r2",
+            metric_for_best_model="eval_r2",
+            greater_is_better=True,
             report_to="none",
         )
 
@@ -450,7 +451,8 @@ class Predictor:
             fp16=True,
             fp16_full_eval=True,
             load_best_model_at_end=True,
-            metric_for_best_model="r2",
+            metric_for_best_model="eval_r2",
+            greater_is_better=True,
             report_to="none",
         )
 

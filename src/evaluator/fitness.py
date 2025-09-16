@@ -5,8 +5,8 @@ from typing import Any, Dict, List, Mapping, Optional
 import torch
 
 from src.evaluator.evaluator import Evaluator
-from src.predictor.predictor import Predictor
-from src.state.state import State
+from src.predictor import Predictor
+from src.state import State
 
 
 class Fitness(Evaluator):
