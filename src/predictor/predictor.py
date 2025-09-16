@@ -95,10 +95,8 @@ class Predictor:
         y = np.array(self.labels)
 
         threshold = np.quantile(y, 0.98)
-        mask = y <= threshold
-
-        X = X[mask]
-        y = y[mask]
+        X = X[y <= threshold]
+        y = y[y <= threshold]
 
         bins = int(np.sqrt(len(y)))
         stratify = pd.qcut(y, bins, labels=False)

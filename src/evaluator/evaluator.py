@@ -28,7 +28,8 @@ class Evaluator(ABC):
         """
         save_path = Path(save_path)
 
-        x = np.asarray(scores, dtype=float)
+        x = np.array(scores)
+        x = x[np.isfinite(x)]
 
         plt.figure(figsize=(8, 6), tight_layout=True)
         plt.hist(x, bins="fd")
@@ -78,10 +79,10 @@ class Evaluator(ABC):
 
             def key(i: int):
                 score = scores[i]
-                
+
                 if self.lower <= score <= self.upper:
                     return (0.0, abs(score - center))
-                
+
                 if score > self.upper:
                     dist = score - self.upper
                 else:
