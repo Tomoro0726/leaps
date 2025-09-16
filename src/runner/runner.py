@@ -101,12 +101,11 @@ class Runner:
 
         for fitness in self.fitnesses:
             outputs.extend(fitness.filter(sequences, strategy="parallel"))
-        outputs = self._unique(outputs)
 
         for fitness in self.fitnesses:
             sequences = fitness.filter(sequences, strategy="series")
-
         outputs.extend(sequences)
+        
         outputs = self._unique(outputs)
 
         return outputs
