@@ -32,6 +32,11 @@ class Regressor(nn.Module):
             nn.Linear(hidden_dim // 2, 1),
         )
 
+        device = next(self.model.parameters()).device
+        dtype = next(self.model.parameters()).dtype
+
+        self.regressor.to(device=device, dtype=dtype)
+
     def forward(
         self,
         *,

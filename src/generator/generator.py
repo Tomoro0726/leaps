@@ -249,13 +249,25 @@ class Generator:
         trainer.train()
 
         self.model = trainer.model.eval()
-        torch.save(self.model, self.weight_dir / f"iter{self.state.iteration}.pt")
+        self.model.save_pretrained(self.weight_dir / f"iter{self.state.iteration}")
 
     def load(self) -> None:
-        self.model = torch.load(
-            self.weight_dir / f"iter{self.state.iteration}.pt", weights_only=False
+        model = AutoModelForCausalLM.from_pretrained(
+            self.model_name_or_path,
+            trust_remote_code=True,
+            torch_dtype=torch.float16,
         )
-        self.model.to(self.device, dtype=torch.float16).eval()
+
+        self.model = (
+            PeftModel.from_pretrained(
+                model,
+                self.weight_dir / f"iter{self.state.iteration}",
+                is_trainable=False,
+            )
+            .to(self.device)
+            .eval()
+        )
+        self.model.config.num_hidden_layers = len(self.model.transformer.h)
 
     @torch.inference_mode()
     def generate(

@@ -132,11 +132,10 @@ class Runner:
         self.sampler.fold()
         samples: Dict[str, List[str]] = self.sampler.sample()
 
-        for name, predictor in self.predictors.items():
-            model_path = self.project_dir / "predictor" / name / "weight" / "model.pt"
-            if model_path.exists():
+        for predictor in self.predictors.values():
+            try:
                 predictor.load()
-            else:
+            except Exception:
                 predictor.train()
 
         model_path = (
@@ -169,12 +168,9 @@ class Runner:
                     sequences = self._pipeline(sequences)
                 self._save(sequences, fasta_path)
 
-            model_path = (
-                self.project_dir / "generator" / "weight" / f"iter{iteration}.pt"
-            )
-            if model_path.exists():
+            try:
                 self.generator.load()
-            else:
+            except Exception:
                 self.generator.train(sequences)
 
             fasta_path = self.output_dir / f"iter{iteration}.fasta"
@@ -182,7 +178,7 @@ class Runner:
                 records = list(SeqIO.parse(fasta_path, "fasta"))
                 sequences = [str(rec.seq) for rec in records]
             else:
-                sequences = self.generator.generate(self.num_sequences)
+                sequences = self.generator.generate(100000 if iteration == 1 else self.num_sequences)
                 sequences = self._unique(sequences)
                 self._save(sequences, fasta_path)
 

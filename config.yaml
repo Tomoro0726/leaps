@@ -51,8 +51,8 @@ predictor:
 
 evaluator:
   hamiltonian:
-    threshold: -5.0
-    mode: max
+    threshold: 0.0
+    mode: min
 
   likelihood:
     batch_size: 32
@@ -105,5 +105,5 @@ early_stopper:
   patience: 5
 
 runner:
-  num_iterations: 35
-  num_sequences: 20000
+  num_iterations: 30
+  num_sequences: 30000

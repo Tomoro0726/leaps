@@ -81,7 +81,8 @@ class Predictor:
 
         random.seed(self.seed)
         np.random.seed(self.seed)
-
+    
+    @torch.inference_mode()
     def _prepare(self) -> Tuple[List[str], List[str], List[float], List[float]]:
         """
         Returns:
@@ -209,8 +210,7 @@ class Predictor:
                 masked_input_ids = input_ids.clone()
                 masked_input_ids[0, i] = self.tokenizer.mask_token_id
 
-                with torch.no_grad():
-                    logits = model(masked_input_ids).logits
+                logits = model(masked_input_ids).logits
 
                 logits = logits[0, i]  # (V,)
                 probs = torch.log_softmax(logits, dim=-1)
@@ -465,14 +465,33 @@ class Predictor:
         trainer.train()
 
         self.model = trainer.model.eval()
-        torch.save(self.model, self.weight_dir / "model.pt")
+        self.model.save_pretrained(self.weight_dir)
+        state_dict = self.model.regressor.state_dict()
+        torch.save(state_dict, self.weight_dir / "regressor.pt")
 
     def load(self) -> None:
-        self.model = torch.load(self.weight_dir / "model.pt", weights_only=False)
-        self.model.to(self.device, dtype=torch.float16).eval()
+        self.model = EsmModel.from_pretrained(
+            self.model_name_or_path, torch_dtype=torch.float16
+        )
+        regressor = Regressor(self.model, self.model.config.hidden_size)
+
+        self.model = (
+            PeftModel.from_pretrained(
+                regressor,
+                self.weight_dir,
+                is_trainable=False,
+            )
+            .to(self.device)
+            .eval()
+        )
+
+        state_dict = torch.load(self.weight_dir / "regressor.pt")
+        self.model.regressor.load_state_dict(state_dict)
+
         self.transformer = joblib.load(self.weight_dir / "transformer.joblib")
         self.scaler = joblib.load(self.weight_dir / "scaler.joblib")
 
+    @torch.inference_mode()
     def predict(self, sequences: List[str]) -> List[float]:
         """
         Args:
@@ -499,12 +518,11 @@ class Predictor:
                 return_tensors="pt",
             ).to(self.device)
 
-            with torch.no_grad():
-                logits = self.model(**inputs).logits
+            logits = self.model(**inputs).logits
 
             outputs.append(logits.detach().reshape(-1))
 
-        outputs = torch.cat(outputs, dim=0).cpu().numpy()
+        outputs = torch.cat(outputs).to(device="cpu", dtype=torch.float64).numpy()
         outputs = self.scaler.inverse_transform(outputs.reshape(-1, 1))
         outputs = self.transformer.inverse_transform(outputs).flatten()
         outputs = outputs.tolist()

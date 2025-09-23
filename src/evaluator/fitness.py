@@ -2,8 +2,6 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Dict, List, Mapping, Optional
 
-import torch
-
 from src.evaluator.evaluator import Evaluator
 from src.predictor import Predictor
 from src.state import State
@@ -44,7 +42,6 @@ class Fitness(Evaluator):
 
         self.predictor = predictor
 
-    @torch.inference_mode()
     def _predict(self, sequences: List[str]) -> List[float]:
         """
         Args:
