@@ -161,16 +161,16 @@ class Hamiltonian(Evaluator):
         """
         model = CouplingsModel(self.weight_dir / "model.params", file_format="plmc_v2")
 
-        # e_wt, _, _ = model.hamiltonians([self.wt_sequence])[0]
-        _, e_wt, _ = model.hamiltonians([self.wt_sequence])[0]
+        e_wt, _, _ = model.hamiltonians([self.wt_sequence])[0]
+        # _, e_wt, _ = model.hamiltonians([self.wt_sequence])[0]
         # _, _, e_wt = model.hamiltonians([self.wt_sequence])[0]
 
         energies = model.hamiltonians(sequences)
-        # e_mut = np.array([e[0] for e in energies])
-        e_mut = np.array([e[1] for e in energies])
+        e_mut = np.array([e[0] for e in energies])
+        # e_mut = np.array([e[1] for e in energies])
         # e_mut = np.array([e[2] for e in energies])
 
-        scores = (e_mut - e_wt).tolist()
+        scores = (e_wt - e_mut).tolist()
 
         return scores
 

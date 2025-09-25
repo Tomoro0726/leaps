@@ -51,8 +51,8 @@ predictor:
 
 evaluator:
   hamiltonian:
-    threshold: 0.0
-    mode: min
+    threshold: 5.0
+    mode: max
 
   likelihood:
     batch_size: 32
