@@ -1,6 +1,6 @@
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, Dict, List, Mapping, Optional
+from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 from src.evaluator.evaluator import Evaluator
 from src.predictor import Predictor
@@ -42,6 +42,19 @@ class Fitness(Evaluator):
 
         self.predictor = predictor
 
+    def sort(
+        self, sequences: List[str], scores: List[float]
+    ) -> List[Tuple[str, float]]:
+        """
+        Args:
+            sequences (List[str]): ソートしたいタンパク質のリスト
+            scores (List[float]): ソートしたいスコアのリスト
+
+        Returns:
+            List[Tuple[str, float]]: ソートされたリスト
+        """
+        return self._sort(sequences, scores)
+
     def _predict(self, sequences: List[str]) -> List[float]:
         """
         Args:
@@ -54,7 +67,7 @@ class Fitness(Evaluator):
 
         return outputs
 
-    def _score(self, sequences: List[str]) -> List[float]:
+    def score(self, sequences: List[str]) -> List[float]:
         """
         Args:
             sequences (List[str]): タンパク質のリスト
@@ -77,7 +90,7 @@ class Fitness(Evaluator):
         """
         assert strategy in ["series", "parallel"]
 
-        scores = self._score(sequences)
+        scores = self.score(sequences)
 
         save_dir = self.result_dir / strategy
         save_dir.mkdir(parents=True, exist_ok=True)

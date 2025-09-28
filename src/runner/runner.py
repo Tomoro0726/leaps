@@ -1,10 +1,11 @@
 from pathlib import Path
 import shutil
-from typing import Dict, List, Mapping
+from typing import Dict, List
 
 from Bio import SeqIO
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
+import pandas as pd
 
 from src.config import Config
 from src.early_stopper import EarlyStopper
@@ -50,7 +51,7 @@ class Runner:
 
         self.sampler = Sampler(cfg["sampler"])
 
-        self.predictors: Mapping[str, Predictor] = {}
+        self.predictors: Dict[str, Predictor] = {}
         for k, v in cfg["predictor"].items():
             if isinstance(v, dict):
                 self.predictors[k] = Predictor(v, k)
@@ -58,13 +59,13 @@ class Runner:
         self.hamiltonian = Hamiltonian(cfg["evaluator"]["hamiltonian"], self.state)
         self.likelihood = Likelihood(cfg["evaluator"]["likelihood"], self.state)
 
-        self.fitnesses: List[Fitness] = []
+        self.fitnesses: Dict[str, Fitness] = {}
         for k, v in cfg["evaluator"].items():
             if k in ["hamiltonian", "likelihood"]:
                 continue
 
             if isinstance(v, dict):
-                self.fitnesses.append(Fitness(v, self.state, k, self.predictors[k]))
+                self.fitnesses[k] = Fitness(v, self.state, k, self.predictors[k])
 
         self.generator = Generator(cfg["generator"], self.state)
 
@@ -99,10 +100,10 @@ class Runner:
         """
         outputs: List[str] = []
 
-        for fitness in self.fitnesses:
+        for fitness in self.fitnesses.values():
             outputs.extend(fitness.filter(sequences, strategy="parallel"))
 
-        for fitness in self.fitnesses:
+        for fitness in self.fitnesses.values():
             sequences = fitness.filter(sequences, strategy="series")
         outputs.extend(sequences)
 
@@ -178,7 +179,9 @@ class Runner:
                 records = list(SeqIO.parse(fasta_path, "fasta"))
                 sequences = [str(rec.seq) for rec in records]
             else:
-                sequences = self.generator.generate(100000 if iteration == 1 else self.num_sequences)
+                sequences = self.generator.generate(
+                    100000 if iteration == 1 else self.num_sequences
+                )
                 sequences = self._unique(sequences)
                 self._save(sequences, fasta_path)
 
@@ -189,4 +192,23 @@ class Runner:
 
             prev = next
 
-        return next
+        sequences = next
+
+        data = {}
+        
+        for name, fitness in self.fitnesses.items():
+            scores = fitness.score(sequences)
+            results = fitness.sort(sequences, scores)
+            ranks = {seq: j + 1 for j, (seq, _) in enumerate(results)}
+            data[name] = pd.Series(ranks)
+
+        df = pd.DataFrame(data, index=sequences)
+
+        k = 60
+        score = (1.0 / (k + df)).sum(axis=1)
+        sequences = score.sort_values(ascending=False).index.tolist()
+
+        fasta_path = self.output_dir / "result.fasta"
+        self._save(sequences[:10], fasta_path)
+
+        return sequences

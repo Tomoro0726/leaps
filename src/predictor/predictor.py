@@ -81,7 +81,7 @@ class Predictor:
 
         random.seed(self.seed)
         np.random.seed(self.seed)
-    
+
     @torch.inference_mode()
     def _prepare(self) -> Tuple[List[str], List[str], List[float], List[float]]:
         """
