@@ -195,11 +195,14 @@ class Runner:
         sequences = next
 
         data = {}
-        
+        results: Dict[str, pd.Series] = {}
+
         for name, fitness in self.fitnesses.items():
             scores = fitness.score(sequences)
-            results = fitness.sort(sequences, scores)
-            ranks = {seq: j + 1 for j, (seq, _) in enumerate(results)}
+            results[name] = pd.Series(scores, index=sequences)
+            ranks = {
+                seq: j + 1 for j, (seq, _) in enumerate(fitness.sort(sequences, scores))
+            }
             data[name] = pd.Series(ranks)
 
         df = pd.DataFrame(data, index=sequences)
@@ -210,5 +213,16 @@ class Runner:
 
         fasta_path = self.output_dir / "result.fasta"
         self._save(sequences[:10], fasta_path)
+
+        csv_path = self.output_dir / "result.csv"
+        names = list(self.fitnesses.keys())
+
+        df = pd.DataFrame(
+            {name: results[name].loc[sequences[:10]].values for name in names},
+            index=sequences[:10],
+        )
+        df = df.rename_axis("sequence").reset_index()
+        df.insert(0, "id", range(1, len(df) + 1))
+        df.to_csv(csv_path, index=False)
 
         return sequences
