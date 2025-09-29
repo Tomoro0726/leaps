@@ -119,7 +119,7 @@ class Fitness(Evaluator):
             if self.mode == "min":
                 return [seq for seq, sc in zip(sequences, scores) if sc <= threshold]
 
-        results = self._sort(sequences, scores)
+        results = self.sort(sequences, scores)
 
         if top_p is not None:
             index = int(len(results) * top_p)

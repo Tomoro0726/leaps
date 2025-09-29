@@ -1,6 +1,6 @@
 from pathlib import Path
 import shutil
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from Bio import SeqIO
 from Bio.Seq import Seq
@@ -125,6 +125,27 @@ class Runner:
 
         SeqIO.write(records, save_path, "fasta")
 
+    def _rr_fusion(
+        self, df: pd.DataFrame, k: int = 60, num_results: Optional[int] = 1000
+    ) -> List[str]:
+        """
+        Args:
+            df (pd.DataFrame): データフレーム
+            k (int): ハイパーパラメータ
+            num_results (Optional[int]): 結果の数
+
+        Returns:
+            List[str]: ソートされたタンパク質のリスト
+        """
+        labels = df.columns[1:].tolist()
+        ranks = df[labels]
+        score = (1.0 / (k + ranks)).sum(axis=1)
+        df["score"] = score
+        df = df.nlargest(num_results, "score")
+        df = df.drop(columns="score")
+
+        return df["sequence"].tolist()
+
     def run(self) -> List[str]:
         """
         Returns:
@@ -148,7 +169,7 @@ class Runner:
         prev: List[str] | None = None
         next: List[str] | None = None
 
-        for iteration in range(1, self.num_iterations + 1):
+        for iteration in range(2, self.num_iterations + 1):
             self.state.iteration = iteration
 
             sequences: List[str] = []
@@ -192,37 +213,23 @@ class Runner:
 
             prev = next
 
-        sequences = next
+        sequences = self.hamiltonian.filter(next)
 
-        data = {}
-        results: Dict[str, pd.Series] = {}
-
+        df = pd.DataFrame({"sequence": sequences})
         for name, fitness in self.fitnesses.items():
-            scores = fitness.score(sequences)
-            results[name] = pd.Series(scores, index=sequences)
-            ranks = {
-                seq: j + 1 for j, (seq, _) in enumerate(fitness.sort(sequences, scores))
-            }
-            data[name] = pd.Series(ranks)
+            df[name] = fitness.score(sequences)
 
-        df = pd.DataFrame(data, index=sequences)
+        data = {"sequence": sequences}
+        for name, fitness in self.fitnesses.items():
+            scores = df[name].tolist()
+            results = fitness.sort(sequences, scores)
+            index = pd.Index([seq for seq, _ in results])
+            data[name] = index.get_indexer(df["sequence"]) + 1
 
-        k = 60
-        score = (1.0 / (k + df)).sum(axis=1)
-        sequences = score.sort_values(ascending=False).index.tolist()
-
-        fasta_path = self.output_dir / "result.fasta"
-        self._save(sequences[:10], fasta_path)
+        sequences = self._rr_fusion(pd.DataFrame(data))
+        df = df.set_index("sequence").loc[sequences].reset_index()
 
         csv_path = self.output_dir / "result.csv"
-        names = list(self.fitnesses.keys())
-
-        df = pd.DataFrame(
-            {name: results[name].loc[sequences[:10]].values for name in names},
-            index=sequences[:10],
-        )
-        df = df.rename_axis("sequence").reset_index()
-        df.insert(0, "id", range(1, len(df) + 1))
         df.to_csv(csv_path, index=False)
 
         return sequences
