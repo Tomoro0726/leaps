@@ -1,0 +1,122 @@
+{
+  "project": "gfp",
+  "debug": true,
+  "device": "cuda",
+  "seed": 42,
+  "sampler": {
+    "num_shuffles": 100000,
+    "shuffle_rate": 0.04,
+    "window_sizes": [
+      1,
+      3,
+      5
+    ]
+  },
+  "predictor": {
+    "ex": {
+      "batch_size": 16,
+      "destruct_per_samples": 0,
+      "model_name_or_path": "facebook/esm2_t30_150M_UR50D",
+      "mutate_per_samples": 150,
+      "noise_ratio": 0.1,
+      "num_destructions": 2,
+      "num_epochs": 200,
+      "num_mutations": 2,
+      "num_trials": 30,
+      "patience": 20,
+      "test_size": 0.2
+    },
+    "em": {
+      "batch_size": 16,
+      "destruct_per_samples": 0,
+      "model_name_or_path": "facebook/esm2_t30_150M_UR50D",
+      "mutate_per_samples": 150,
+      "noise_ratio": 0.1,
+      "num_destructions": 2,
+      "num_epochs": 200,
+      "num_mutations": 2,
+      "num_trials": 30,
+      "patience": 20,
+      "test_size": 0.2
+    },
+    "brightness": {
+      "batch_size": 16,
+      "destruct_per_samples": 0,
+      "model_name_or_path": "facebook/esm2_t30_150M_UR50D",
+      "mutate_per_samples": 150,
+      "noise_ratio": 0.1,
+      "num_destructions": 2,
+      "num_epochs": 200,
+      "num_mutations": 2,
+      "num_trials": 30,
+      "patience": 20,
+      "test_size": 0.2
+    }
+  },
+  "evaluator": {
+    "hamiltonian": {
+      "threshold": 5.0,
+      "mode": "min"
+    },
+    "likelihood": {
+      "batch_size": 32,
+      "model_name_or_path": "westlake-repl/SaProt_650M_AF2",
+      "threshold": 0.0,
+      "mode": "max"
+    },
+    "ex": {
+      "batch_size": 32,
+      "mode": "range",
+      "upper": 388,
+      "lower": 378,
+      "series": {
+        "top_p": 0.4
+      },
+      "parallel": {
+        "top_p": 0.2
+      }
+    },
+    "em": {
+      "batch_size": 32,
+      "mode": "range",
+      "upper": 453,
+      "lower": 443,
+      "series": {
+        "top_p": 0.4
+      },
+      "parallel": {
+        "top_p": 0.2
+      }
+    },
+    "brightness": {
+      "batch_size": 32,
+      "mode": "max",
+      "series": {
+        "top_p": 0.4
+      },
+      "parallel": {
+        "top_p": 0.2
+      }
+    }
+  },
+  "generator": {
+    "batch_size": 32,
+    "max_new_token": 233,
+    "model_name_or_path": "hugohrban/progen2-small",
+    "num_epochs": 6,
+    "num_trials": 30,
+    "patience": 3,
+    "prompt": "MSKGE",
+    "test_size": 0.1
+  },
+  "early_stopper": {
+    "batch_size": 32,
+    "model_name_or_path": "facebook/esm2_t33_650M_UR50D",
+    "num_samples": 1000,
+    "patience": 5
+  },
+  "runner": {
+    "num_iterations": 30,
+    "num_sequences": 30000
+  }
+}

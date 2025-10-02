@@ -1,0 +1,56 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Jupyter Notebook
+.ipynb_checkpoints
+notebooks/
+
+# Tests
+tests/
+test_*.py
+
+# Documentation
+*.md
+!README.md
+CONTRIBUTING.md
+
+# CI/CD
+.github/
+
+# Build artifacts
+*.egg-info/
+dist/
+build/
+
+# Runs directory (will be created at runtime)
+runs/
+
+# Environment files
+.env
+.env.*
+
+# OS files
+.DS_Store
+Thumbs.db
