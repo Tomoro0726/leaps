@@ -93,17 +93,20 @@ try:
     download(src, dst)
 
     # Convert JSON to YAML
+    # Use task_id as unique identifier to avoid conflicts between concurrent workers
     with open("config.json", "r") as f:
         config = json.load(f)
+    # Override project name with task_id to ensure unique output directories
+    config["project"] = f"{project_id}_{task_id}"
     with open("config.yaml", "w") as g:
         yaml.safe_dump(config, g, sort_keys=False)
 
     # Run main.py
     subprocess.run(["uv", "run", "python", "main.py"], check=True)
 
-    # Upload result.csv
-    src = f"runs/{project_id}/runner/output/result.csv"
-    dst = f"{project_id}/result.csv"
+    # Upload result.csv with task_id to prevent overwrites
+    src = f"runs/{config['project']}/runner/output/result.csv"
+    dst = f"{project_id}/result_{task_id}.csv"
     upload(src, dst, "text/csv")
 
     update(task_id, "succeeded")  # Update task status

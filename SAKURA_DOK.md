@@ -171,7 +171,15 @@ curl -X POST https://api.koukaryoku-dok.sakura.ad.jp/v1/containers \
   -d '{"name": "leaps-worker-2", ...}'
 ```
 
-各ワーカーは`FOR UPDATE SKIP LOCKED`を使用するため、安全に並列実行できます。
+### 並行実行の安全性
+
+複数のワーカーが同時に動作する場合でも、以下の仕組みで安全に処理されます：
+
+1. **データベースロック**: `FOR UPDATE SKIP LOCKED` により、同一タスクが複数のワーカーで処理されることを防止
+2. **一意な出力ディレクトリ**: 各タスクは `{project_id}_{task_id}` という一意のディレクトリで実行
+3. **一意なファイル名**: 結果ファイルは `{project_id}/result_{task_id}.csv` として保存され、上書きを防止
+
+これにより、同じ `project_id` を持つ複数のタスクでも、互いに干渉することなく並列実行できます。
 
 ## コスト管理
 
