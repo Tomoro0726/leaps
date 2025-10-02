@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  leaps-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: leaps-worker
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - STORAGE_URL=${STORAGE_URL}
+      - BLOB_READ_WRITE_TOKEN=${BLOB_READ_WRITE_TOKEN}
+      - USE_TORCH=ON
+    volumes:
+      # Optional: Mount runs directory to persist results
+      - ./runs:/app/runs
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    env_file:
+      - .env
