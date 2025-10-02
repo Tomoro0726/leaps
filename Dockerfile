@@ -4,7 +4,8 @@ FROM nvidia/cuda:12.1.0-cudnn8-runtime-ubuntu22.04
 # Set environment variables
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
-    USE_TORCH=ON
+    USE_TORCH=ON \
+    PATH="/root/.cargo/bin:/app/bin:$PATH"
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
@@ -23,7 +24,6 @@ RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1
 
 # Install uv package manager
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
-ENV PATH="/root/.cargo/bin:$PATH"
 
 # Set working directory
 WORKDIR /app
@@ -56,10 +56,7 @@ RUN wget https://mmseqs.com/foldseek/foldseek-linux-gpu.tar.gz && \
     rm -rf foldseek foldseek-linux-gpu.tar.gz
 
 # Install additional Python packages for worker
-RUN pip install --no-cache-dir psycopg[binary] python-dotenv requests
-
-# Set PATH to include bin directory
-ENV PATH="/app/bin:$PATH"
+RUN pip install --no-cache-dir psycopg[binary] python-dotenv requests pyyaml
 
 # Run the worker
 CMD ["uv", "run", "python", "worker.py"]
