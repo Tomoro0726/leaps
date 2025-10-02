@@ -108,6 +108,20 @@ export SAKURA_API_TOKEN='your-api-token'
 
 詳細は [SAKURA_DOK.md](./SAKURA_DOK.md) を参照してください。
 
+### Docker Hub からの利用
+
+ビルド済みイメージを Docker Hub から直接利用できます：
+
+```bash
+# 標準版
+docker pull {username}/leaps:latest
+
+# Sakura Dok最適化版
+docker pull {username}/leaps-sakura:latest
+```
+
+CI/CDにより、`release`ブランチへのプッシュ時に自動的にイメージが更新されます。詳細は [CI_CD.md](./CI_CD.md) を参照してください。
+
 <br/>
 <br/>
 
