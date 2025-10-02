@@ -76,6 +76,55 @@ $ python main.py
 <br/>
 <br/>
 
+## 🐳 Docker / クラウドでの実行
+
+LEAPSはDockerコンテナとして実行でき、以下のプラットフォームに対応しています：
+
+### Docker Compose (ローカル/自社サーバー)
+
+```bash
+# 環境変数の設定
+cp .env.example .env
+# .envを編集
+
+# コンテナの起動
+docker-compose up -d
+```
+
+詳細は [DOCKER.md](./DOCKER.md) を参照してください。
+
+### さくらインターネット 高火力Dok
+
+GPUコンテナサービス「高火力Dok」での実行に最適化されています：
+
+```bash
+# イメージのビルド
+./build-sakura.sh -r your-registry.example.com/myproject -p
+
+# デプロイ
+export SAKURA_API_TOKEN='your-api-token'
+./deploy-sakura.sh -i your-registry.example.com/myproject/leaps-worker:latest
+```
+
+詳細は [SAKURA_DOK.md](./SAKURA_DOK.md) を参照してください。
+
+### Docker Hub からの利用
+
+ビルド済みイメージを Docker Hub から直接利用できます：
+
+```bash
+# 標準版
+docker pull {username}/leaps:latest
+
+# Sakura Dok最適化版
+docker pull {username}/leaps-sakura:latest
+```
+
+CI/CDにより、`release`ブランチへのプッシュ時に自動的にイメージが更新されます。詳細は [CI_CD.md](./CI_CD.md) を参照してください。
+
+<br/>
+<br/>
+
 ## 📂 Structure
 
 ```

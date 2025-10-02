@@ -1,0 +1,77 @@
+# Dockerfile for Sakura Internet High-Power Dok
+# Optimized for Sakura's GPU container service
+
+FROM nvidia/cuda:12.1.0-cudnn8-runtime-ubuntu22.04
+
+# Set environment variables
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1 \
+    USE_TORCH=ON \
+    PATH="/root/.cargo/bin:/app/bin:$PATH"
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    curl \
+    git \
+    wget \
+    python3.11 \
+    python3.11-dev \
+    python3-pip \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set Python 3.11 as default
+RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1 && \
+    update-alternatives --install /usr/bin/python python /usr/bin/python3.11 1
+
+# Install uv package manager
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Set working directory
+WORKDIR /app
+
+# Copy project files
+COPY pyproject.toml uv.lock ./
+COPY requirements.txt ./
+COPY main.py ./
+COPY src ./src
+COPY config.yaml ./
+COPY worker.py ./
+
+# Install Python dependencies using uv
+RUN uv sync --frozen
+
+# Create necessary directories
+RUN mkdir -p /app/bin /app/data /app/runs
+
+# Install plmc (for evolutionary coupling analysis)
+RUN git clone https://github.com/debbiemarkslab/plmc.git /tmp/plmc && \
+    cd /tmp/plmc && \
+    make all-openmp && \
+    cp bin/plmc /app/bin/plmc && \
+    chmod +x /app/bin/plmc && \
+    rm -rf /tmp/plmc
+
+# Install foldseek (for protein structure comparison)
+RUN wget -q https://mmseqs.com/foldseek/foldseek-linux-gpu.tar.gz && \
+    tar xzf foldseek-linux-gpu.tar.gz && \
+    cp foldseek/bin/foldseek /app/bin/foldseek && \
+    chmod +x /app/bin/foldseek && \
+    rm -rf foldseek foldseek-linux-gpu.tar.gz
+
+# Install additional Python packages for worker
+RUN pip install --no-cache-dir psycopg[binary] python-dotenv requests pyyaml
+
+# Verify installations
+RUN python --version && \
+    uv --version && \
+    /app/bin/plmc -h || true && \
+    /app/bin/foldseek version || true
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD python -c "import sys; sys.exit(0)"
+
+# Run the worker
+CMD ["uv", "run", "python", "worker.py"]

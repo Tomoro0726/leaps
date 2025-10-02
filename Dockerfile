@@ -1,0 +1,65 @@
+# Use NVIDIA CUDA base image for GPU support
+FROM nvidia/cuda:12.1.0-cudnn8-runtime-ubuntu22.04
+
+# Set environment variables
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1 \
+    USE_TORCH=ON
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    curl \
+    git \
+    wget \
+    python3.11 \
+    python3.11-dev \
+    python3-pip \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set Python 3.11 as default
+RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1 \
+    && update-alternatives --install /usr/bin/python python /usr/bin/python3.11 1
+
+# Install uv package manager
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+ENV PATH="/root/.cargo/bin:$PATH"
+
+# Set working directory
+WORKDIR /app
+
+# Copy project files
+COPY pyproject.toml uv.lock ./
+COPY requirements.txt ./
+COPY main.py ./
+COPY src ./src
+COPY config.yaml ./
+COPY worker.py ./
+
+# Install Python dependencies using uv
+RUN uv sync
+
+# Create necessary directories
+RUN mkdir -p /app/bin /app/data /app/runs
+
+# Install plmc (for evolutionary coupling analysis)
+RUN git clone https://github.com/debbiemarkslab/plmc.git /tmp/plmc && \
+    cd /tmp/plmc && \
+    make all-openmp && \
+    cp bin/plmc /app/bin/ && \
+    rm -rf /tmp/plmc
+
+# Install foldseek (for protein structure comparison)
+RUN wget https://mmseqs.com/foldseek/foldseek-linux-gpu.tar.gz && \
+    tar xvfz foldseek-linux-gpu.tar.gz && \
+    cp foldseek/bin/foldseek /app/bin/ && \
+    rm -rf foldseek foldseek-linux-gpu.tar.gz
+
+# Install additional Python packages for worker
+RUN pip install --no-cache-dir psycopg[binary] python-dotenv requests
+
+# Set PATH to include bin directory
+ENV PATH="/app/bin:$PATH"
+
+# Run the worker
+CMD ["uv", "run", "python", "worker.py"]
